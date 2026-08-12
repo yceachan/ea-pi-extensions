@@ -5,7 +5,7 @@
 // (.github/workflows/publish.yml).
 
 import { execSync } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -18,7 +18,7 @@ const HELP = `mono-release — 锁步发版（bump + release 提交 + tag + push
   bun run mono-release -- --help   显示本帮助
 
 流程:
-  1. 校验五个 manifest（根 + packages/*）版本一致
+  1. 校验全部 manifest（根 + packages/*）版本一致
   2. 守卫: 工作区必须干净（未提交改动会随 release 一起被遗漏）
   3. 守卫: 自上一 tag 以来 packages/ 必须有实质变更（纯 changelog/docs 不发版）
   4. registry 前置守卫: 目标版本已在任一包存在则中止（先 mono-sync --sync）
@@ -56,16 +56,26 @@ if (extras.length > 0) {
 	process.exit(1);
 }
 
-const packages = [
-	"pi-gadget",
-	"pi-oc-go-luna-vision",
-	"pi-shelld",
-	"pi-switch-cwd",
-];
-const manifestPaths = [
-	join(root, "package.json"),
-	...packages.map((p) => join(root, "packages", p, "package.json")),
-];
+// Discover workspace members from the root workspaces field (same expansion
+// as mono-sync.mjs) instead of a hardcoded list — a package added without
+// touching this list would silently miss the bump and break lockstep.
+const rootManifest = readJson(join(root, "package.json"));
+const workspaces = rootManifest.workspaces ?? ["packages/*"];
+const members = [];
+for (const pattern of workspaces) {
+	if (pattern.endsWith("/*")) {
+		const dir = join(root, pattern.slice(0, -2));
+		for (const entry of readdirSync(dir, { withFileTypes: true })) {
+			if (!entry.isDirectory() || entry.name === "node_modules") continue;
+			const path = join(dir, entry.name, "package.json");
+			if (existsSync(path)) members.push({ path, json: readJson(path) });
+		}
+	} else {
+		const path = join(root, pattern, "package.json");
+		if (existsSync(path)) members.push({ path, json: readJson(path) });
+	}
+}
+const manifestPaths = [join(root, "package.json"), ...members.map((m) => m.path)];
 
 function readJson(path) {
 	try {
@@ -168,9 +178,8 @@ const next =
 // Pre-flight: never bump onto a version that already exists on the registry.
 // A hit means local is behind the registry baseline — sync first.
 const occupied = [];
-for (const p of packages) {
-	const name = readJson(join(root, "packages", p, "package.json")).name;
-	if (await alreadyPublished(name, next)) occupied.push(name);
+for (const m of members) {
+	if (await alreadyPublished(m.json.name, next)) occupied.push(m.json.name);
 }
 if (occupied.length > 0) {
 	console.error(`✗ v${next} already published for: ${occupied.join(", ")}`);
