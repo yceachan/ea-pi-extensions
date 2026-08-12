@@ -152,7 +152,7 @@ if (TYPE_ALIASES[type] !== undefined) {
 if (!MANUAL_TYPES.includes(type)) {
 	if (type === "release") {
 		fail(
-			"release 提交禁止手写——只由 mono-release 生成（bun run mono-release:patch）",
+			"release 提交禁止手写——只由 mono-release 生成（bun run mono-release -- pi-gadget minor）",
 		);
 	}
 	fail(`未知 type: "${type}"（词表: ${MANUAL_TYPES.join(" | ")}）`);

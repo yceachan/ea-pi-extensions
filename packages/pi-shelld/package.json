@@ -1,6 +1,6 @@
 {
   "name": "@yceachan/pi-shelld",
-  "version": "0.2.0",
+  "version": "0.1.1",
   "description": "pi extension: shell_daemon tool + TUI monitor for long-running background processes",
   "keywords": [
     "pi-package",

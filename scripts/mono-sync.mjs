@@ -1,41 +1,44 @@
 #!/usr/bin/env bun
-// mono-sync — keep the mono workspace's versions in lockstep with the npm
-// registry.
+// mono-sync — per-package alignment with the npm registry.
 //
-// The root package.json and every package under packages/ must share one
-// version. This helper checks, aligns, or sets them WITHOUT touching git
-// (scripts/mono-release.mjs owns the commit/tag/push part of a release).
+// Packages share no version under the per-package model; each one must not
+// fall behind its own registry baseline (its highest published version).
+// This helper checks, reports, or aligns each package's manifest version to
+// that baseline WITHOUT touching git (scripts/mono-release.mjs owns the
+// commit/tag/push part of a release).
 //
 // Advancing versions is release semantics — that belongs to mono-release.
-// The one mono-sync action that CHANGES versions is --sync, which aligns
-// local manifests to the highest version already published on the registry,
-// so a subsequent release always starts from the registry baseline (never
-// collides with an existing version).
+// The one action that CHANGES versions here is --sync: it aligns a package
+// that is behind its registry baseline up to that baseline. A package ahead
+// of its baseline means an unfinished release; --sync refuses to downgrade.
 
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const HELP = `mono-sync — 检查 / 对齐 mono workspace 版本号（纯文件操作，不碰 git）
+const HELP = `mono-sync — 逐包检查 / 对齐 registry 基线（纯文件操作，不碰 git）
 
 用法:
-  bun run mono-sync                   显示版本表与一致性状态
-  bun run mono-sync -- --check        一致性门禁（不一致时 exit 1）
-  bun run mono-sync -- --sync         对齐到 registry 最高已发布版本
-  bun run mono-sync -- --set <版本>   全部 manifest 设为指定版本（X.Y.Z）
-  bun run mono-sync -- --dry-run      预览不写入（与 --sync / --set 组合）
-  bun run mono-sync -- --help         显示本帮助
+  bun run mono-sync                    显示每包本地版本 vs registry 基线
+  bun run mono-sync -- --check         门禁（有包低于基线时 exit 1）
+  bun run mono-sync -- --sync          落后包对齐到自己的 registry 基线
+  bun run mono-sync -- --sync --dry-run  预览不写入
+  bun run mono-sync -- --help          显示本帮助
 
 说明:
-  - 覆盖对象: 根 package.json + packages/*（由根 workspaces 自动展开）
-  - 不提供 bump 操作: 推进版本号是 mono-release 的职责
-  - --sync 拉齐到四包已发布最高版本; 本地高于 registry 时拒绝降级
-  - --set 在本地版本不一致时拒绝覆盖（--dry-run 可安全预览）
+  - 覆盖对象: packages/*（根 manifest 无版本，不参与）
+  - 逐包独立版本: 基线 = 该包在 registry 的最高已发布版本
+  - 本地高于基线 = 发版未完成，--sync 拒绝降级（--check 仅告警）
+  - 不提供 bump / --set: 推进版本号是 mono-release 的职责
 `;
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-
 const args = process.argv.slice(2);
+
+if (args.length === 0) {
+	console.log(HELP);
+	process.exit(1);
+}
 if (args.includes("--help") || args.includes("-h")) {
 	console.log(HELP);
 	process.exit(0);
@@ -44,16 +47,8 @@ if (args.includes("--help") || args.includes("-h")) {
 const dryRun = args.includes("--dry-run");
 const doCheck = args.includes("--check");
 const doSync = args.includes("--sync");
-const setIndex = args.indexOf("--set");
-const targetVersion = setIndex !== -1 ? args[setIndex + 1] : undefined;
-if (setIndex !== -1 && targetVersion === undefined) {
-	console.error("✗ --set requires a version argument: --set X.Y.Z");
-	process.exit(1);
-}
 
-const known = ["--dry-run", "--check", "--sync", "--set", targetVersion].filter(
-	Boolean,
-);
+const known = ["--dry-run", "--check", "--sync", "--help", "-h"];
 const unknown = args.filter((a) => !known.includes(a));
 if (unknown.length > 0) {
 	console.error(`✗ unknown argument(s): ${unknown.join(", ")}`);
@@ -74,45 +69,17 @@ function writeJson(path, value) {
 	writeFileSync(path, JSON.stringify(value, null, 2) + "\n");
 }
 
-function dirList(dir) {
-	try {
-		return readdirSync(dir, { withFileTypes: true })
-			.filter((e) => e.isDirectory() && e.name !== "node_modules")
-			.map((e) => e.name);
-	} catch {
-		return [];
-	}
-}
-
-function existsSafe(path) {
-	try {
-		readFileSync(path);
-		return true;
-	} catch {
-		return false;
-	}
-}
-
-function packageManifests() {
-	const rootManifest = {
-		path: join(root, "package.json"),
-		json: readJson(join(root, "package.json")),
-	};
-	const workspaces = rootManifest.json.workspaces ?? ["packages/*"];
+function packageMembers() {
 	const members = [];
-	for (const pattern of workspaces) {
-		if (pattern.endsWith("/*")) {
-			const dir = join(root, pattern.slice(0, -2));
-			for (const entry of dirList(dir)) {
-				const path = join(dir, entry, "package.json");
-				if (existsSafe(path)) members.push({ path, json: readJson(path) });
-			}
-		} else {
-			const path = join(root, pattern, "package.json");
-			if (existsSafe(path)) members.push({ path, json: readJson(path) });
-		}
+	const dir = join(root, "packages");
+	for (const entry of readdirSync(dir, { withFileTypes: true })) {
+		if (!entry.isDirectory() || entry.name === "node_modules") continue;
+		const path = join(dir, entry.name, "package.json");
+		try {
+			members.push({ pkg: entry.name, path, json: readJson(path) });
+		} catch {}
 	}
-	return { root: rootManifest, members };
+	return members;
 }
 
 function isValidVersion(version) {
@@ -128,108 +95,87 @@ function compareVersions(a, b) {
 	return 0;
 }
 
-function registryUrl(name) {
-	return `https://registry.npmjs.org/${name.replace("/", "%2F")}`;
-}
-
-async function publishedVersions(name) {
+async function highestPublished(name) {
 	try {
-		const res = await fetch(registryUrl(name), {
-			signal: AbortSignal.timeout(10000),
-		});
-		if (!res.ok) return [];
+		const res = await fetch(
+			`https://registry.npmjs.org/${name.replace("/", "%2F")}`,
+			{ signal: AbortSignal.timeout(10000) },
+		);
+		if (!res.ok) return null;
 		const doc = await res.json();
-		return Object.keys(doc.versions ?? {}).filter(isValidVersion);
+		const versions = Object.keys(doc.versions ?? {}).filter(isValidVersion);
+		if (versions.length === 0) return null;
+		return versions.reduce((a, b) => (compareVersions(a, b) > 0 ? a : b));
 	} catch {
 		console.error(`✗ cannot reach registry for ${name}`);
 		process.exit(1);
 	}
 }
 
-async function highestPublished(manifests) {
-	let highest = null;
-	for (const m of manifests) {
-		const versions = await publishedVersions(m.json.name);
-		if (versions.length === 0) continue;
-		const max = versions.reduce((a, b) => (compareVersions(a, b) > 0 ? a : b));
-		if (highest === null || compareVersions(max, highest) > 0) highest = max;
+const members = packageMembers();
+const baselines = new Map();
+for (const m of members) {
+	baselines.set(m.pkg, await highestPublished(`@yceachan/${m.pkg}`));
+}
+
+const rows = members.map((m) => {
+	const local = m.json.version;
+	const base = baselines.get(m.pkg) ?? "（未发布）";
+	let state = "ok";
+	if (base !== "（未发布）") {
+		const cmp = compareVersions(local, base);
+		if (cmp < 0) state = "behind";
+		else if (cmp > 0) state = "ahead";
 	}
-	return highest;
+	return { ...m, base, state };
+});
+
+console.log("─".repeat(52));
+for (const r of rows) {
+	console.log(
+		`  ${`@yceachan/${r.pkg}`.padEnd(30)} local ${r.json.version.padEnd(8)} base ${r.base}`,
+	);
 }
+console.log("─".repeat(52));
 
-const { root: rootManifest, members } = packageManifests();
-const manifests = [rootManifest, ...members];
-const versions = manifests.map((m) => m.json.version);
-const labels = manifests.map((m) => m.path.replace(root + "/", ""));
-
-console.log("─".repeat(48));
-for (let i = 0; i < manifests.length; i++) {
-	console.log(`  ${labels[i].padEnd(34)} ${versions[i]}`);
+const behind = rows.filter((r) => r.state === "behind");
+const ahead = rows.filter((r) => r.state === "ahead");
+if (behind.length === 0 && ahead.length === 0) {
+	console.log("✓ 所有包已与各自 registry 基线对齐");
+} else {
+	if (behind.length > 0)
+		console.log(`✗ 落后基线: ${behind.map((r) => r.pkg).join(", ")}`);
+	if (ahead.length > 0)
+		console.warn(
+			`⚠ 领先基线（发版未完成?）: ${ahead.map((r) => r.pkg).join(", ")}`,
+		);
 }
-console.log("─".repeat(48));
-
-const consistent = new Set(versions).size === 1;
-console.log(
-	consistent ? "✓ 本地版本一致" : `✗ 本地版本不一致（${versions.join(" / ")}）`,
-);
 
 if (doCheck) {
-	process.exit(consistent ? 0 : 1);
+	process.exit(behind.length > 0 ? 1 : 0);
 }
 
 if (doSync) {
-	const highest = await highestPublished(members);
-	if (highest === null) {
-		console.log(
-			"registry 上还没有已发布的包（4 包均无版本记录），本地保持不变",
-		);
-		process.exit(0);
-	}
-	const ahead = versions.filter((v) => compareVersions(v, highest) > 0);
 	if (ahead.length > 0) {
 		console.error(
-			`✗ 本地版本 ${ahead.join(", ")} 高于 registry 最高已发布版本 ${highest}`,
+			`✗ ${ahead.map((r) => r.pkg).join(", ")} 本地领先 registry 基线——`,
 		);
 		console.error(
-			"  本地领先通常意味着上一次发布未完成；请先处理失败的发布，再考虑对齐",
+			"  领先通常意味着上一次发布未完成；请先按容灾手册处理失败的发布，再考虑对齐",
 		);
 		process.exit(1);
 	}
-	const aligned = versions.every((v) => compareVersions(v, highest) === 0);
-	if (aligned) {
-		console.log(`✓ 已与 registry 对齐（最高已发布版本 ${highest}）`);
+	if (behind.length === 0) {
+		console.log("✓ 无包落后基线，无需对齐");
 		process.exit(0);
 	}
-	console.log(
-		`registry 最高已发布版本: ${highest}（本地 ${new Set(versions).size > 1 ? "不一致" : versions[0]}）`,
-	);
-	for (const m of manifests) {
+	for (const r of behind) {
 		console.log(
-			`${dryRun ? "[dry-run] " : ""}${m.path.replace(root + "/", "")}: ${m.json.version} → ${highest}`,
+			`${dryRun ? "[dry-run] " : ""}${r.pkg}: ${r.json.version} → ${r.base}`,
 		);
 		if (!dryRun) {
-			m.json.version = highest;
-			writeJson(m.path, m.json);
-		}
-	}
-} else if (targetVersion !== undefined) {
-	if (!isValidVersion(targetVersion)) {
-		console.error(`✗ invalid version: ${targetVersion} (expects X.Y.Z)`);
-		process.exit(1);
-	}
-	if (!consistent && !dryRun) {
-		console.error(
-			"✗ refusing to overwrite inconsistent versions; fix manually or use --dry-run to preview",
-		);
-		process.exit(1);
-	}
-	for (const m of manifests) {
-		console.log(
-			`${dryRun ? "[dry-run] " : ""}${m.path.replace(root + "/", "")}: ${m.json.version} → ${targetVersion}`,
-		);
-		if (!dryRun) {
-			m.json.version = targetVersion;
-			writeJson(m.path, m.json);
+			r.json.version = r.base;
+			writeJson(r.path, r.json);
 		}
 	}
 }

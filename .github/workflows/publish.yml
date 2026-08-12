@@ -3,11 +3,28 @@ name: publish
 on:
   push:
     tags:
-      - "v*"
+      # Per-package tags: <pkg>@<ver> (e.g. pi-gadget@0.3.0). Legacy
+      # lockstep tags (v0.1.1, v0.1.2, v0.2.0) contain no '@' and no
+      # longer trigger this workflow.
+      - "*@*"
+  # Dry-run entry: same validation pipeline, no npm publish / no Release.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Package tag to dry-run, e.g. pi-gadget@0.3.0"
+        required: false
+      dry_run:
+        description: "Dry run: validate + echo, skip npm publish and Release creation"
+        type: boolean
+        default: true
 
 permissions:
   id-token: write
   contents: write   # gh release create (release page from tag)
+
+env:
+  TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
 
 jobs:
   publish:
@@ -20,56 +37,78 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 24
-      - name: Detect changed packages
-        id: changed
+
+      # The tag itself is the publish instruction: <pkg>@<ver> names the
+      # package and the exact version. Anything inconsistent is a hard
+      # failure BEFORE any publish.
+      - name: Parse and validate tag
+        id: parsed
         run: |
-          prev="$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || true)"
-          if [ -z "$prev" ]; then
-            dirs="$(ls -d packages/*/ | xargs -n1 basename | tr '\n' ' ')"
-          else
-            # Diff against HEAD^ (not HEAD): the release commit itself bumps
-            # every package.json, so including it would make every package look
-            # changed and defeat on-demand publishing (version holes).
-            dirs="$(git diff --name-only "$prev"..HEAD^ -- packages/ \
-              | sed -n 's|^packages/\([^/]*\)/.*|\1|p' | sort -u | tr '\n' ' ')"
+          tag="$TAG"
+          if [ -z "$tag" ]; then
+            echo "::error::no tag given (push a <pkg>@<ver> tag or pass one via workflow_dispatch)"
+            exit 1
           fi
-          # Multi-line values are rejected by GITHUB_OUTPUT ("Invalid format")
-          # unless written with the heredoc delimiter — hence tr '\n' ' '.
-          echo "changed=$dirs" >> "$GITHUB_OUTPUT"
-      - name: Publish changed packages
+          case "$tag" in
+            *@*) ;;
+            *)
+              echo "::error::'$tag' is not a package tag (expects <pkg>@<ver>)"
+              exit 1
+              ;;
+          esac
+          pkg="${tag%@*}"
+          ver="${tag#*@}"
+          echo "$pkg" | grep -qE '^[a-z0-9-]+$' || { echo "::error::bad package name '$pkg'"; exit 1; }
+          echo "$ver" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "::error::bad version '$ver'"; exit 1; }
+          [ -f "packages/$pkg/package.json" ] || { echo "::error::unknown package '$pkg'"; exit 1; }
+          actual="$(node -p "require('./packages/$pkg/package.json').version")"
+          [ "$actual" = "$ver" ] || {
+            echo "::error::tag version $ver does not match packages/$pkg/package.json version $actual"
+            exit 1
+          }
+          echo "pkg=$pkg" >> "$GITHUB_OUTPUT"
+          echo "ver=$ver" >> "$GITHUB_OUTPUT"
+
+      - name: Publish package
         env:
-          CHANGED: ${{ steps.changed.outputs.changed }}
+          PKG: ${{ steps.parsed.outputs.pkg }}
+          VER: ${{ steps.parsed.outputs.ver }}
         run: |
-          for pkg in $CHANGED; do
-            if [ -f "packages/$pkg/package.json" ]; then
-              name="@yceachan/$pkg"
-              ver="$(node -p "require('./packages/$pkg/package.json').version")"
-              # Idempotent retry: skip versions already on the registry, so a
-              # partially failed run can be safely re-run (rerun would
-              # otherwise die with EPUBLISHCONFLICT on published packages).
-              if npm view "$name@$ver" version >/dev/null 2>&1; then
-                echo "skip $name@$ver (already published)"
-                continue
-              fi
-              echo "Publishing $name@$ver"
-              npm publish --workspace="$name" \
-                --provenance --access public
-            fi
-          done
+          name="@yceachan/$PKG"
+          # Idempotent retry: skip versions already on the registry, so a
+          # partially failed run can be safely re-run.
+          if npm view "$name@$VER" version >/dev/null 2>&1; then
+            echo "skip $name@$VER (already published)"
+            exit 0
+          fi
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "[dry-run] would publish: npm publish --workspace=\"$name\" --provenance --access public"
+            exit 0
+          fi
+          echo "Publishing $name@$VER"
+          npm publish --workspace="$name" \
+            --provenance --access public
+
       # A plain tag push does not create a GitHub Release page — create it
-      # here from the manual release notes (changelog/vX.Y.Z/log.md) so every
-      # tag gets a page. Idempotent: a re-run with an existing release just
-      # skips it, matching the publish loop above.
+      # here from the manual release notes (changelog/<pkg>/<tag>/log.md) so
+      # every package tag gets a page. Idempotent: a re-run with an existing
+      # release just skips it, matching the publish step above.
       - name: Create GitHub Release
         env:
+          PKG: ${{ steps.parsed.outputs.pkg }}
+          VER: ${{ steps.parsed.outputs.ver }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="${GITHUB_REF#refs/tags/}"
+          tag="$TAG"
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "[dry-run] would create GitHub Release $tag (notes: changelog/$PKG/v$VER/log.md)"
+            exit 0
+          fi
           if gh release view "$tag" >/dev/null 2>&1; then
             echo "release $tag already exists — skip"
             exit 0
           fi
-          notes="changelog/$tag/log.md"
+          notes="changelog/$PKG/v$VER/log.md"
           args=(--title "$tag")
           if [ -f "$notes" ]; then
             # Relative links in the changelog are meaningless on a release

@@ -7,7 +7,7 @@
     },
     "packages/pi-better-mermaid": {
       "name": "@yceachan/pi-better-mermaid",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "devDependencies": {
         "@earendil-works/pi-ai": "latest",
         "@earendil-works/pi-coding-agent": "latest",
@@ -21,7 +21,7 @@
     },
     "packages/pi-gadget": {
       "name": "@yceachan/pi-gadget",
-      "version": "0.1.1",
+      "version": "0.2.0",
       "peerDependencies": {
         "@earendil-works/pi-coding-agent": "*",
         "typebox": "*",

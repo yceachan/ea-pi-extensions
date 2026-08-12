@@ -53,14 +53,14 @@ type(scope): subject
 | `chore` | 杂务：依赖、元数据、基线对齐 | `chore: bump devDependencies` |
 | `refactor` | 行为不变的重构 | `refactor(pi-shelld): extract poll loop` |
 | `test` | 测试新增/修改 | `test(pi-switch-cwd): cover path edge cases` |
-| `ci` | CI 流水线与发布管线 | `ci: fix changed-package detection` |
+| `ci` | CI 流水线与发布管线 | `ci: publish the package named by the tag` |
 | `release` | 发版提交——**仅由 mono-release.mjs 生成，禁止手写** | `release: v0.1.2` |
 
 不预占 `perf` / `build` / `style` / `revert`：本仓库无对应场景，出现时归入最接近的既有类型并在 subject 说明。
 
 ### scope 词表
 
-- **包名（单一包变更必填）**：`pi-gadget` / `pi-oc-go-luna-vision` / `pi-shelld` / `pi-switch-cwd`
+- **包名（单一包变更必填）**：`pi-gadget` / `pi-better-mermaid` / `pi-oc-go-luna-vision` / `pi-shelld` / `pi-switch-cwd`
 - **跨切面**：`scripts`（工具脚本）、`ci`（workflow）、`docs`（文档）、`release`（发版流程）、`changelog`（发布说明）、`root`（根 manifest / workspace 配置）
 - 同时涉及多个包或无法归属时**省略 scope**：`feat: ...`
 
@@ -103,12 +103,15 @@ bun run gcm -- -t fix -p shelld -m "drain zombie shells on session end"
 发版提交由 `scripts/mono-release.mjs` 自动生成，人类不参与：
 
 ```text
-release: v0.1.2        ← 脚本生成，commit 只含 5 个 package.json 的版本变更
+release: pi-gadget@0.3.0                       ← 单包发版
+release: pi-gadget@0.3.0, pi-shelld@0.1.2      ← 多包同发（一提交 + N 个 tag）
 ```
 
-- 版本号只允许两条路径改动：`mono-sync`（`--set` / `--sync` 纯文件编辑）与 `mono-release`（bump + 提交 + tag + push）
-- **禁止手写 `release:` 提交、禁止手工改 package.json 版本号**（绕过守卫 = 撞版本 / 版本空洞错乱）
-- 脚本内置三个守卫：版本一致性、脏工作区、自上一 tag 无包变更（空发布）——被拦时按提示处理，不要绕过
+- 版本号只允许两条路径改动：`mono-sync`（`--sync` 纯文件编辑）与 `mono-release`（bump + 提交 + tag + push）
+- **禁止手写 `release:` 提交、禁止手工改 package.json 版本号**（绕过守卫 = 撞版本）
+- 脚本内置守卫：干净工作区、目标版本未在该包 registry 存在、该包自上个逐包 tag 以来
+  有实质变更（无基线时仅告警）——被拦时按提示处理，不要绕过
+- 逐包 tag 格式 `<pkg>@<ver>`（如 `pi-gadget@0.3.0`），tag 自身即 CI 发布指令
 - 发版完整仪式见 [发行版本控制策略.md](发行版本控制策略.md)
 
 ## Changelog
@@ -117,25 +120,24 @@ release: v0.1.2        ← 脚本生成，commit 只含 5 个 package.json 的�
 
 ```text
 changelog/
-└── v0.1.2/
-    └── log.md          # 该版本的发布说明
+├── pi-gadget/
+│   └── v0.3.0/
+│       └── log.md      # 该包该版本的发布说明
+└── ...
 ```
 
 - **手工撰写、发版前提交**（Q：为何不是脚本生成？——发布说明需要人判断，脚本只负责版本仪式）
-- 提交格式：`docs(changelog): v0.1.2`，内容按 type 分组、引用提交 subject 提炼
+- 提交格式：`docs(changelog): pi-gadget v0.3.0`，内容按 type 分组、引用提交 subject 提炼
 - `mono-release.mjs` 只在 changelog 缺失时**告警不拦截**——规范靠自觉，脚本不强制
 - 语言：中文（与 docs 一致；README/包描述保持英文面向 gallery）
 
 ```text
-# v0.1.2
+# pi-gadget v0.3.0
 
 ## feat
-- pi-shelld: ...
+- pi_cite_wslpath: ...
 
 ## fix
-- pi-gadget: ...
-
-## ci
 - ...
 ```
 
@@ -153,7 +155,7 @@ changelog/
 | `fix stuff` | `fix(pi-shelld): drain zombie shells on session end` |
 | `Update README.md` | `docs: add mono-sync usage to README` |
 | `feat: 增加功能`（中文 subject） | `feat(pi-gadget): archive session on /clear` |
-| `Release v0.1.2`（手写发版） | `release: v0.1.2`（仅脚本生成） |
+| `Release v0.1.2`（手写发版） | `release: pi-gadget@0.3.0`（仅脚本生成） |
 | `fix: 🐛 fix shell bug`（emoji） | `fix(pi-shelld): reap dead children on exit` |
 | `git add -A && git commit -m "wip"` | 显式暂存 + 单逻辑提交 |
 
@@ -162,7 +164,7 @@ changelog/
 | 维度 | pi（../../source） | 本仓库 |
 | --- | --- | --- |
 | 格式 | `{feat,fix,docs}[(scope)]: subject` | 同源，八型词表 + 包名 scope |
-| scope | 包名（ai/tui/agent/...） | 四包名 + scripts/ci/docs/release/changelog/root |
-| release 提交 | maintainer 手动 `release: vX.Y.Z` | 脚本自动 `release: vX.Y.Z` |
-| changelog | maintainer 维护 CHANGELOG.md | 每版 `changelog/vX.Y.Z/log.md` 手工提交 |
+| scope | 包名（ai/tui/agent/...） | 五包名 + scripts/ci/docs/release/changelog/root |
+| release 提交 | maintainer 手动 `release: vX.Y.Z` | 脚本自动 `release: pi-gadget@0.3.0` |
+| changelog | maintainer 维护 CHANGELOG.md | 每版 `changelog/<pkg>/vX.Y.Z/log.md` 手工提交 |
 | 语言 | 英文 | 提交英文、文档中文 |
