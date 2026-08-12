@@ -11,7 +11,7 @@ actually changed.
 | [`@yceachan/pi-oc-go-luna-vision`](packages/pi-oc-go-luna-vision) | visual understanding via gpt-5.6-luna when the main model has no vision | [pi.dev](https://pi.dev/packages) |
 | [`@yceachan/pi-gadget`](packages/pi-gadget) | single-file utilities: `/clear` session archiving, `/exit` | [pi.dev](https://pi.dev/packages) |
 | [`@yceachan/pi-switch-cwd`](packages/pi-switch-cwd) | `/cwd` — switch the session working directory | [pi.dev](https://pi.dev/packages) |
-| [`@yceachan/pi-better-mermaid`](packages/pi-better-mermaid) | `better-mermaid` — bundles the writing-mermaid rules as a skill, gates the agent-delivered diagram with mmdc validation, loops on structured errors (3 strikes) | [pi.dev](https://pi.dev/packages) |
+| [`@yceachan/pi-better-mermaid`](packages/pi-better-mermaid) | `better-mermaid` — bundles the writing-mermaid rules as a skill, gates the agent-delivered diagram with mmdc validation, loops on structured errors (3 strikes) · [capability evals](packages/pi-better-mermaid/skills/better-mermaid/evals/README.md) | [pi.dev](https://pi.dev/packages) |
 
 ## Structure
 
@@ -28,6 +28,10 @@ actually changed.
 │   ├── gcm.mjs              # manual commit entry (type/scope validation, fuzzy scope pick)
 │   ├── mono-release.mjs     # lockstep bump + release commit + tag + push
 │   └── mono-sync.mjs        # version check / registry alignment
+├── docs/                     # 提交/发版规范 + tag 回退与 CI 容灾 runbook
+│   ├── git提交规范.md
+│   ├── 发行版本控制策略.md
+│   └── tag回退与CI容灾.md
 ├── changelog/
 │   └── vX.Y.Z/log.md        # per-release notes (manual, docs(changelog):)
 └── .github/workflows/
