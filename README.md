@@ -11,6 +11,7 @@ actually changed.
 | [`@yceachan/pi-oc-go-luna-vision`](packages/pi-oc-go-luna-vision) | visual understanding via gpt-5.6-luna when the main model has no vision | [pi.dev](https://pi.dev/packages) |
 | [`@yceachan/pi-gadget`](packages/pi-gadget) | single-file utilities: `/clear` session archiving, `/exit` | [pi.dev](https://pi.dev/packages) |
 | [`@yceachan/pi-switch-cwd`](packages/pi-switch-cwd) | `/cwd` — switch the session working directory | [pi.dev](https://pi.dev/packages) |
+| [`@yceachan/pi-better-mermaid`](packages/pi-better-mermaid) | `better-mermaid` — bundles the writing-mermaid rules as a skill, gates the agent-delivered diagram with mmdc validation, loops on structured errors (3 strikes) | [pi.dev](https://pi.dev/packages) |
 
 ## Structure
 
@@ -20,7 +21,8 @@ actually changed.
 │   ├── pi-gadget/
 │   ├── pi-oc-go-luna-vision/
 │   ├── pi-shelld/
-│   └── pi-switch-cwd/
+│   ├── pi-switch-cwd/
+│   └── pi-better-mermaid/
 ├── scripts/
 │   ├── mono-release.mjs     # lockstep bump + release commit + tag + push
 │   └── mono-sync.mjs        # version check / registry alignment
@@ -37,6 +39,7 @@ pi install npm:@yceachan/pi-shelld
 pi install npm:@yceachan/pi-oc-go-luna-vision
 pi install npm:@yceachan/pi-gadget
 pi install npm:@yceachan/pi-switch-cwd
+pi install npm:@yceachan/pi-better-mermaid
 ```
 
 ## Development

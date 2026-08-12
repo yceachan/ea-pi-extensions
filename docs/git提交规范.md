@@ -14,7 +14,7 @@ update: 2026-08-12
 mindmap
   root((Git 提交规范))
     "提交信息格式"
-      "type(scope): subject"
+      "type scope subject"
       "八型词表"
       "scope 词表"
       "subject / body 规则"
@@ -29,7 +29,7 @@ mindmap
     "Changelog"
       "changelog/vX.Y.Z/log.md"
       "手工提交"
-      "docs(changelog):"
+      "docs-changelog-"
     "分支与 PR"
       "直推 main"
       "外部走 PR"

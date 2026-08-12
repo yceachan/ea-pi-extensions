@@ -38,6 +38,10 @@ mindmap
 
 ## Tag 的本质与回退机制
 
+> [!note]
+>
+> tag 是远端git引用 `git fetch --tags` 或`git pull` ,tag就会附着在本地git提交上。
+
 **tag 是 ref（名字），不是内容**。删除 tag 只移除名字，被指向的提交对象永久保留在历史中：
 
 ```bash
