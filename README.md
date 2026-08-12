@@ -1,7 +1,6 @@
 # ea-pi-extensions
 
-A [bun](https://bun.sh) workspace monorepo for [yceachan](https://github.com/yceachan)'s pi
-extensions. All packages share one lockstep version; releases publish only the packages that
+A [bun](https://bun.sh) workspace monorepo for [yceachan](https://github.com/yceachan)'s pi-extensions. All packages share one lockstep version; releases publish only the packages that
 actually changed.
 
 ## Packages
@@ -23,7 +22,10 @@ actually changed.
 │   ├── pi-shelld/
 │   └── pi-switch-cwd/
 ├── scripts/
-│   └── release.mjs     # lockstep version bump + Release commit + tag + push
+│   ├── mono-release.mjs     # lockstep bump + release commit + tag + push
+│   └── mono-sync.mjs        # version check / registry alignment
+├── changelog/
+│   └── vX.Y.Z/log.md        # per-release notes (manual, docs(changelog):)
 └── .github/workflows/
     └── publish.yml     # tag-triggered CI publish (npm OIDC, provenance)
 ```
@@ -51,12 +53,15 @@ No build step — pi loads TypeScript directly via jiti. Edit sources and `/relo
 Lockstep versioning with on-demand publishing:
 
 ```bash
-bun run release:patch   # or release:minor / release:major
+bun run mono-release:patch   # or mono-release:minor / mono-release:major
 ```
 
-`scripts/release.mjs` bumps **all** packages to one shared version, commits `Release vX.Y.Z`,
-tags it, and pushes. The `publish.yml` workflow then diffs the tag range, detects which packages
-changed, and publishes exactly those with `npm publish --provenance` (OIDC trusted publishing).
+`scripts/mono-release.mjs` bumps **all** packages to one shared version, commits `release: vX.Y.Z`,
+tags it, and pushes — after enforcing a clean working tree and the presence of real package
+changes. Write release notes first (`changelog/vX.Y.Z/log.md`, committed as `docs(changelog):`).
+The `publish.yml` workflow then diffs the tag range (excluding the release commit itself),
+detects which packages changed, and publishes exactly those with `npm publish --provenance`
+(OIDC trusted publishing).
 
 Prerequisite (one-time): configure npm [Trusted Publishers](https://docs.npmjs.com/trusted-publishers/)
 for each package — repository `yceachan/ea-pi-extensions`, workflow `publish.yml`.
