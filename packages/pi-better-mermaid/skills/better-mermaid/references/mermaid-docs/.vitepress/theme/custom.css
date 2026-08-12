@@ -1,0 +1,33 @@
+@import 'font-awesome/css/font-awesome.min.css';
+@import '@mdi/font/css/materialdesignicons.min.css';
+
+/* Colors: Brand */
+:root {
+  /* use for colored text */
+  --vp-c-pink-1: #e0095f;
+
+  /* use for hover state of button */
+  --vp-c-pink-2: #b0134a;
+
+  /* use for background button color */
+  --vp-c-pink-3: #e0095f;
+
+  /* use for custom container or badges */
+  --vp-c-pink-4: rgba(159, 122, 234, 0.14);
+}
+
+:root {
+  --vp-c-brand-1: var(--vp-c-pink-1);
+  --vp-c-brand-2: var(--vp-c-pink-2);
+  --vp-c-brand-3: var(--vp-c-pink-3);
+}
+
+.vp-doc > div {
+  width: 100%;
+}
+
+a.edit {
+  margin: 12px;
+  position: relative;
+  top: 10px;
+}

@@ -1,0 +1,50 @@
+{
+  "name": "@yceachan/pi-better-mermaid",
+  "version": "0.1.1",
+  "description": "pi extension + skill: the writing-mermaid rules bundled as the better-mermaid skill, gated by an mmdc validation tool — deliver a diagram, get structured errors, fix, repeat (3 strikes)",
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "pi",
+    "mermaid",
+    "mmdc",
+    "diagram",
+    "validation"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yceachan/ea-pi-extensions.git",
+    "directory": "packages/pi-better-mermaid"
+  },
+  "homepage": "https://github.com/yceachan/ea-pi-extensions#readme",
+  "files": [
+    "extensions",
+    "skills",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "pi": {
+    "extensions": [
+      "./extensions"
+    ],
+    "skills": [
+      "./skills"
+    ]
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-ai": "*",
+    "@mermaid-js/mermaid-cli": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "latest",
+    "@earendil-works/pi-ai": "latest",
+    "@types/node": "^24"
+  }
+}

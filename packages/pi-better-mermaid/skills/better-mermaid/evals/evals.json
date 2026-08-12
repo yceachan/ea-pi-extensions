@@ -1,0 +1,65 @@
+{
+  "skill_name": "writing-mermaid",
+  "evals": [
+    {
+      "id": 0,
+      "name": "imx-chardev-read-irq-seq",
+      "prompt": "帮我画一个时序图，IMX6ULL 上一个字符设备驱动从用户态 read() 进入内核到返回数据的完整调用链。要体现 IRQ → softirq → wq 那条路径，也要把 kernel/user 边界标出来。直接给我一个 ```mermaid``` 块就行。",
+      "expected_output": "A sequenceDiagram (NOT a flowchart/graph) with: autonumber on line 2; participants quoted with \"\"; kernel/user boundary visible via `box` groupings or explicit `note over`; at least one advanced primitive among alt/opt/loop/par/rect/note; messages quoted with \"\"; arrow choice differentiates call (`->>`) vs return (`-->>`); contains the IRQ→softirq→wq chain.",
+      "files": [],
+      "expectations": [
+        "The mermaid block uses `sequenceDiagram`, not `flowchart` or `graph`",
+        "The second non-blank line of the diagram is `autonumber`",
+        "Every text label (participant alias, message text, note text) is wrapped in double quotes",
+        "The diagram contains zero semicolon characters",
+        "The diagram uses at least one of: `alt`, `opt`, `loop`, `par`, `rect rgb(`, or `note over`",
+        "The diagram explicitly marks the kernel/user boundary via `box`, `note over`, or `rect rgb(` grouping",
+        "The diagram mentions IRQ, softirq, and workqueue (or wq) as distinct steps",
+        "If any `rect rgb(R,G,B)` is used, every R, G, B channel value is greater than 200"
+      ]
+    },
+    {
+      "id": 1,
+      "name": "tcp-state-machine",
+      "prompt": "用 mermaid 给我画一下 TCP 的状态机，从 CLOSED 到 ESTABLISHED 到各种 close 路径都要有。",
+      "expected_output": "A stateDiagram-v2 (NOT a flowchart/graph) starting with [*] → CLOSED, leading through LISTEN/SYN_SENT/SYN_RECEIVED to ESTABLISHED, then the close paths through FIN_WAIT_1/FIN_WAIT_2/CLOSE_WAIT/LAST_ACK/TIME_WAIT/CLOSING back to CLOSED/[*]. Every transition label is quoted. No semicolons.",
+      "files": [],
+      "expectations": [
+        "The mermaid block uses `stateDiagram-v2`, not `flowchart` or `graph` or `stateDiagram` (without -v2)",
+        "The diagram contains `[*]` start/end markers",
+        "Every transition label (text after the colon on transition lines) is wrapped in double quotes",
+        "The diagram contains zero semicolon characters",
+        "The diagram includes at least these states: CLOSED, LISTEN, SYN_SENT, ESTABLISHED, FIN_WAIT_1, CLOSE_WAIT, TIME_WAIT",
+        "The diagram includes a transition labeled with SYN, a transition labeled with FIN, and a transition labeled with ACK or close()"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "tspi-sdk-nested-repos",
+      "prompt": "我的项目里 sdk/tspi-rk3566-sdk 下面 kernel-6.1 / u-boot / buildroot 是嵌套的独立 git 仓库（不是 submodule，就是物理嵌套的 .git/）。画个图给笔记用，让人一眼看出这层结构和它们的独立性。",
+      "expected_output": "A diagram that conveys the nesting AND the independence of the inner repos. Likely flowchart with subgraphs OR classDiagram with namespace+composition. NOT a plain `graph TD` with 4 bare nodes — should use subgraph/namespace to show the containment, and a visual cue (separate styled boxes / annotations) for the independence. Quoting + no semicolons.",
+      "files": [],
+      "expectations": [
+        "The mermaid block is NOT a plain flat `graph TD` with no subgraphs or namespaces — uses `subgraph`, `namespace`, or composite states to show nesting",
+        "Every text label / node label / edge label is wrapped in double quotes",
+        "The diagram contains zero semicolon characters",
+        "The diagram clearly names all four entities: tspi-rk3566-sdk (or the outer SDK), kernel-6.1, u-boot, buildroot",
+        "The diagram conveys the 'independent git repo' aspect via visual cues — annotation, distinct shape/style, note, or distinct grouping (not just plain edges)"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "cqrs-eventmodeling",
+      "prompt": "我在写 CQRS 学习笔记，需要一个图：用户点'提交订单'按钮 → SubmitOrder 命令 → OrderSubmitted 事件 → 更新订单 View。用 mermaid 给我画一下。",
+      "expected_output": "An `eventmodeling` diagram (v11.15+ syntax) with time frames in distinct swimlanes: ui (按钮), cmd (SubmitOrder), evt (OrderSubmitted), view (订单 View). Should use the swimlane semantics that eventmodeling provides — NOT a generic flowchart with 4 boxes. Quoting + no semicolons.",
+      "files": [],
+      "expectations": [
+        "The mermaid block uses the `eventmodeling` diagram type (v11.15+), not `flowchart` / `graph` / `sequenceDiagram`",
+        "The diagram contains all four swimlane types: a `ui` time frame, a `cmd` (or `command`) time frame, an `evt` (or `event`) time frame, and a `view` (or `readmodel`) time frame",
+        "Time-frame labels and inline data (if present) follow the project's quoting discipline — names and string values wrapped in double quotes where the syntax accepts them",
+        "The diagram contains zero semicolon characters",
+        "Time frames are referenced by unique numeric IDs"
+      ]
+    }
+  ]
+}
