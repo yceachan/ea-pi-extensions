@@ -1,0 +1,43 @@
+name: publish
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Detect changed packages
+        id: changed
+        run: |
+          prev="$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || true)"
+          if [ -z "$prev" ]; then
+            dirs="$(ls -d packages/*/ | xargs -n1 basename)"
+          else
+            dirs="$(git diff --name-only "$prev"..HEAD -- packages/ \
+              | sed -n 's|^packages/\([^/]*\)/.*|\1|p' | sort -u)"
+          fi
+          echo "changed=$dirs" >> "$GITHUB_OUTPUT"
+      - name: Publish changed packages
+        env:
+          CHANGED: ${{ steps.changed.outputs.changed }}
+        run: |
+          for pkg in $CHANGED; do
+            if [ -f "packages/$pkg/package.json" ]; then
+              echo "Publishing @yceachan/$pkg"
+              npm publish --workspace="@yceachan/$pkg" \
+                --provenance --access public
+            fi
+          done

@@ -1,0 +1,42 @@
+{
+  "name": "@yceachan/pi-gadget",
+  "version": "0.1.1",
+  "description": "pi extension collection: /clear session archiving, /exit pi, and other single-file utilities",
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "pi",
+    "gadget",
+    "clear",
+    "exit"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yceachan/ea-pi-extensions.git",
+    "directory": "packages/pi-gadget"
+  },
+  "homepage": "https://github.com/yceachan/ea-pi-extensions#readme",
+  "files": [
+    "pi-clear.ts",
+    "pi-exit.ts",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "pi": {
+    "extensions": [
+      "./pi-clear.ts",
+      "./pi-exit.ts"
+    ]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "typebox": "*"
+  },
+  "trustedDependencies": [
+    "@google/genai",
+    "protobufjs"
+  ]
+}

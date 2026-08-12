@@ -1,0 +1,49 @@
+{
+  "name": "@yceachan/pi-shelld",
+  "version": "0.1.1",
+  "description": "pi extension: shell_daemon tool + TUI monitor for long-running background processes",
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "pi",
+    "shell",
+    "background-process",
+    "tui"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yceachan/ea-pi-extensions.git",
+    "directory": "packages/pi-shelld"
+  },
+  "homepage": "https://github.com/yceachan/ea-pi-extensions#readme",
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "pi": {
+    "extensions": [
+      "./src/index.ts"
+    ]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*",
+    "@earendil-works/pi-ai": "*",
+    "typebox": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "latest",
+    "@earendil-works/pi-tui": "latest",
+    "@earendil-works/pi-ai": "latest",
+    "typebox": "^1.3.7",
+    "@types/node": "^24"
+  },
+  "trustedDependencies": [
+    "@google/genai",
+    "protobufjs"
+  ]
+}

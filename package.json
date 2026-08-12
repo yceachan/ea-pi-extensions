@@ -1,0 +1,15 @@
+{
+  "name": "ea-pi-extensions",
+  "version": "0.1.1",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "release:patch": "node scripts/release.mjs patch",
+    "release:minor": "node scripts/release.mjs minor",
+    "release:major": "node scripts/release.mjs major",
+    "typecheck": "bun run --filter '*' typecheck"
+  }
+}

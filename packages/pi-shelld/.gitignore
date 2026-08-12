@@ -1,0 +1,6 @@
+node_modules/
+*.log
+.shelld/
+.pi/
+.DS_Store
+.pi-subagents/

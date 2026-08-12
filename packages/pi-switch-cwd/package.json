@@ -1,0 +1,45 @@
+{
+  "name": "@yceachan/pi-switch-cwd",
+  "version": "0.1.1",
+  "description": "pi extension: /cwd — switch the session working directory (session file moves with it)",
+  "type": "module",
+  "files": [
+    "index.ts",
+    "cwd-utils.ts",
+    "README.md"
+  ],
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "pi",
+    "cwd",
+    "working-directory"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yceachan/ea-pi-extensions.git",
+    "directory": "packages/pi-switch-cwd"
+  },
+  "homepage": "https://github.com/yceachan/ea-pi-extensions#readme",
+  "publishConfig": {
+    "access": "public"
+  },
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "latest",
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  },
+  "trustedDependencies": [
+    "@google/genai",
+    "protobufjs"
+  ]
+}

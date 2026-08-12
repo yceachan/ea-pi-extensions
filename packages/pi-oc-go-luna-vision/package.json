@@ -1,0 +1,50 @@
+{
+  "name": "@yceachan/pi-oc-go-luna-vision",
+  "version": "0.1.1",
+  "description": "pi extension + skill: visual understanding via the gpt-5.6-luna vision model (opencode-go provider, OpenAI Responses API) when the main model cannot see images",
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "pi",
+    "vision",
+    "image",
+    "opencode-go",
+    "luna"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yceachan/ea-pi-extensions.git",
+    "directory": "packages/pi-oc-go-luna-vision"
+  },
+  "homepage": "https://github.com/yceachan/ea-pi-extensions#readme",
+  "files": [
+    "extensions",
+    "skills",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "pi": {
+    "extensions": [
+      "./extensions"
+    ],
+    "skills": [
+      "./skills"
+    ]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-ai": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "latest",
+    "@earendil-works/pi-ai": "latest",
+    "@types/node": "^24"
+  },
+  "trustedDependencies": [
+    "@google/genai",
+    "protobufjs"
+  ]
+}
