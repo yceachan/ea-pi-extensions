@@ -74,7 +74,7 @@ Per-package versioning, tag-as-publish-instruction:
 ```bash
 ./gbump -p pi-gadget --minor                   # one-click: pre-flight checks then release
 ./gbump -p pi-gadget --set-ver 0.5.0           # explicit target version
-./gbump -p pi-gadget -c --minor                # scaffold the changelog, prints its path
+./gcm -c -p pi-gadget --minor                  # scaffold the changelog, prints path + commit hint
 bun run mono-release -- pi-gadget minor pi-shelld patch  # ceremony directly (skips gbump pre-flight)
 ```
 
@@ -85,11 +85,18 @@ package's local version equals its registry baseline, and that
 `release: pi-gadget@0.3.0`, tags each `pi-gadget@0.3.0`, and pushes — after enforcing a
 clean working tree, that the target version is not yet on the registry for that package,
 and that the package actually changed since its last package tag. Write release notes
-first (`changelog/<pkg>/vX.Y.Z/log.md`, committed as `docs(changelog): <pkg> vX.Y.Z`).
+first: `./gcm -c -p <pkg> --minor` scaffolds
+`changelog/<pkg>/vX.Y.Z/log.md`, which you fill in and commit as
+`docs(changelog): <pkg> vX.Y.Z`.
 The `publish.yml` workflow (trigger: tags matching `*@*`) parses the tag, verifies
 `packages/<pkg>/package.json` matches the tag version, and publishes exactly that
 package with `npm publish --provenance` (OIDC trusted publishing). A `workflow_dispatch`
 dry-run entry runs the same validation without publishing — use it to test pipeline changes.
+
+`bun run mono-sync` shows each package's local version against its registry baseline;
+`bun run mono-sync -- --sync` aligns any package that lags behind, automatically
+refreshes the workspace with `bun install` (so `bun.lock` follows), and reports the
+changed files and dirty-tree state — review and commit before releasing.
 
 Prerequisite (one-time): configure npm [Trusted Publishers](https://docs.npmjs.com/trusted-publishers/)
 for each package — repository `yceachan/ea-pi-extensions`, workflow `publish.yml`.

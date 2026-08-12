@@ -6,7 +6,7 @@
   ],
   "scripts": {
     "gcm": "./gcm",
-    "mono-sync": "bun scripts/mono-sync.mjs --help",
+    "mono-sync": "bun scripts/mono-sync.mjs",
     "mono-release": "bun scripts/mono-release.mjs --help",
     "version:check": "bun scripts/mono-sync.mjs --check",
     "version:sync": "bun scripts/mono-sync.mjs --sync",

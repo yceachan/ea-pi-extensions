@@ -86,6 +86,10 @@ bun run gcm -- -t fix -p shelld -m "drain zombie shells on session end"
 - `-t` 校验词表并归一别名（`chores` → `chore`）；`release` 一律拒绝（仅 mono-release 生成）
 - `-p` 支持包名**模糊搜索**，非精确命中必须二次确认（TTY 交互选择 / 非交互 `-y`）
 - `-m` 校验 ≤50 字符、小写开头、无 emoji（违规直接拦截，中文/大写首字母告警）
+- `-c` changelog 骨架模式：`./gcm -c -p <pkg> --minor` 创建
+  `changelog/<pkg>/vX.Y.Z/log.md` 骨架并打印提交提示（版本也可用
+  `--patch/--major/--set-ver`，必须高于该包 registry 基线；只创建文件，
+  不碰 git、不发版）
 - 提交卫生由脚本强制：暂存区为空直接报错，且只提交暂存区（不替你 `git add`）
 - `--dry` 验证模式：走完整校验 + 可达性检查（在仓库内、暂存区非空），只回显构造出的完整命令不落库
 - `--print` 只输出拼好的提交信息不落库，供 agent/管道使用（与 `--dry` 同给时优先）
@@ -107,7 +111,8 @@ release: pi-gadget@0.3.0                       ← 单包发版
 release: pi-gadget@0.3.0, pi-shelld@0.1.2      ← 多包同发（一提交 + N 个 tag）
 ```
 
-- 版本号只允许两条路径改动：`mono-sync`（`--sync` 纯文件编辑）与 `mono-release`（bump + 提交 + tag + push）
+- 版本号只允许两条路径改动：`mono-sync`（`--sync`：对齐 manifest + `bun install` 刷新
+  bun.lock）与 `mono-release`（bump + 提交 + tag + push）
 - **禁止手写 `release:` 提交、禁止手工改 package.json 版本号**（绕过守卫 = 撞版本）
 - 脚本内置守卫：干净工作区、目标版本未在该包 registry 存在、该包自上个逐包 tag 以来
   有实质变更（无基线时仅告警）——被拦时按提示处理，不要绕过
@@ -127,7 +132,7 @@ changelog/
 ```
 
 - **手工撰写、发版前提交**（Q：为何不是脚本生成？——发布说明需要人判断，脚本只负责版本仪式）
-- 骨架生成：`./gbump -p <pkg> -c --minor` 创建 `changelog/<pkg>/vX.Y.Z/log.md` 并打印路径
+- 骨架生成：`./gcm -c -p <pkg> --minor` 创建 `changelog/<pkg>/vX.Y.Z/log.md` 并打印提交提示
 - 提交格式：`docs(changelog): pi-gadget v0.3.0`，内容按 type 分组、引用提交 subject 提炼
 - `mono-release.mjs` 只在 changelog 缺失时**告警不拦截**——规范靠自觉，脚本不强制
 - 语言：中文（与 docs 一致；README/包描述保持英文面向 gallery）

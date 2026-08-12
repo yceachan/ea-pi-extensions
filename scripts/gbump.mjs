@@ -4,11 +4,11 @@
 // 三项预检全部通过才执行发版仪式:
 //   1. monorepo 干净（git status --porcelain 为空）
 //   2. 包本地版本 == 其 registry 基线（落后 → 提示 version:sync；领先 → 提示容灾）
-//   3. changelog/<pkg>/v<ver>/log.md 已存在且含实质条目（-c 生成骨架）
+//   3. changelog/<pkg>/v<ver>/log.md 已存在且含实质条目（骨架由 ./gcm -c 生成）
 //
 // 发版仪式本身由 scripts/mono-release.mjs 执行（bump/--set-ver → 提交 → tag → push）。
 
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execSync, spawnSync } from "node:child_process";
@@ -18,18 +18,14 @@ const HELP = `gbump — 手工发版一键入口（预检 → 委托 mono-releas
 用法:
   ./gbump -p <package> [--patch | --minor | --major | --set-ver <vX.Y.Z>]
   ./gbump -p <package> [--patch | --minor | --major | --set-ver <vX.Y.Z>] --dry-run
-  ./gbump -p <package> -c [--patch | --minor | --major | --set-ver <vX.Y.Z>]   # 创建 changelog 骨架并打印路径
   ./gbump --help
 
 预检（全部通过才执行发版仪式）:
   1. monorepo 干净（git status --porcelain 为空）
   2. 包本地版本 == 其 registry 基线
      落后 → 先 bun run version:sync；领先 → 发版未完成，按容灾手册处理
-  3. changelog/<pkg>/v<ver>/log.md 已存在且含实质条目（-c 可生成骨架）
-     骨架不含 "- " 条目，不会误过检查——须手工填写
-
--c 模式: 仅创建 changelog 骨架并打印路径（跳过工作区干净检查），
-目标版本由 --patch/--minor/--major 推算或 --set-ver 指定。
+  3. changelog/<pkg>/v<ver>/log.md 已存在且含实质条目
+     骨架由 ./gcm -c 生成，不含 "- " 条目——须手工填写实质条目
 
 发版仪式: bun scripts/mono-release.mjs <pkg> <bump|--set-ver <ver>>
 `;
@@ -44,7 +40,6 @@ if (args.length === 0 || args.includes("--help") || args.includes("-h")) {
 
 // ── 参数解析 ─────────────────────────────────────────────────────────────
 let pkg = null;
-let create = false;
 let dryRun = false;
 let mode = null; // "patch" | "minor" | "major" | "set-ver"
 let setVer = null;
@@ -55,8 +50,6 @@ for (let i = 0; i < args.length; i++) {
 		if (pkg !== null) fail("duplicate -p");
 		if (i + 1 >= args.length) fail("-p requires a package name");
 		pkg = args[++i];
-	} else if (a === "-c") {
-		create = true;
 	} else if (a === "--dry-run") {
 		dryRun = true;
 	} else if (a === "--patch" || a === "--minor" || a === "--major") {
@@ -64,7 +57,8 @@ for (let i = 0; i < args.length; i++) {
 		mode = a.slice(2);
 	} else if (a === "--set-ver") {
 		if (mode !== null) fail(`conflicting version flags (already ${mode})`);
-		if (i + 1 >= args.length) fail("--set-ver requires a version: --set-ver X.Y.Z");
+		if (i + 1 >= args.length)
+			fail("--set-ver requires a version: --set-ver X.Y.Z");
 		setVer = args[++i];
 		mode = "set-ver";
 	} else {
@@ -72,8 +66,10 @@ for (let i = 0; i < args.length; i++) {
 	}
 }
 if (pkg === null) fail("-p <package> is required");
-if (mode === null) fail("missing version flag: --patch | --minor | --major | --set-ver <vX.Y.Z>");
-if (create && dryRun) fail("-c 与 --dry-run 不共存（-c 只创建文件，不执行发版）");
+if (mode === null)
+	fail(
+		"missing version flag: --patch | --minor | --major | --set-ver <vX.Y.Z>",
+	);
 
 function fail(msg) {
 	console.error(`✗ ${msg}`);
@@ -186,7 +182,9 @@ if (base === null) {
 	console.error(
 		`✗ ${pkg} 本地 ${current} 落后 registry 基线 ${base} ——先对齐:`,
 	);
-	console.error("    bun run version:sync -- --dry-run   （确认后去掉 --dry-run）");
+	console.error(
+		"    bun run version:sync -- --dry-run   （确认后去掉 --dry-run）",
+	);
 	process.exit(1);
 } else if (compareVersions(current, base) > 0) {
 	console.error(
@@ -199,38 +197,6 @@ if (base === null) {
 // ── changelog ────────────────────────────────────────────────────────────
 const changelogPath = join(root, "changelog", pkg, `v${target}`, "log.md");
 
-if (create) {
-	// -c 模式: 创建骨架并打印路径（不检查工作区，不执行发版）。
-	if (base !== null && base !== "unreachable" && compareVersions(target, base) <= 0) {
-		console.error(
-			`✗ v${target} 不高于 registry 基线 ${base} ——该版本无需新 changelog`,
-		);
-		process.exit(1);
-	}
-	if (existsSync(changelogPath)) {
-		console.error(`✗ 已存在，勿覆盖: ${changelogPath}`);
-		process.exit(1);
-	}
-	mkdirSync(dirname(changelogPath), { recursive: true });
-	writeFileSync(
-		changelogPath,
-		[
-			`# ${pkg} v${target}`,
-			"",
-			"## feat",
-			"",
-			"## fix",
-			"",
-			"<!-- 骨架：按 feat / fix / chore / ci / docs 分组填写 \"- \" 条目 -->",
-			"<!-- 填写完成后手工提交: bun run gcm -- -t docs -p changelog -m \"<pkg> v<target>\" -->",
-			"",
-		].join("\n"),
-	);
-	console.log(`✓ created ${changelogPath}`);
-	console.log(`  填写条目后提交: bun run gcm -- -t docs -p changelog -m "${pkg} v${target}"`);
-	process.exit(0);
-}
-
 // ── 预检 1: monorepo 干净 ────────────────────────────────────────────────
 const dirty = runCapture(`git status --porcelain`).trim();
 if (dirty.length > 0) {
@@ -242,7 +208,9 @@ if (dirty.length > 0) {
 // ── 预检 3: changelog 已就绪且含实质条目 ───────────────────────────────────
 if (!existsSync(changelogPath)) {
 	console.error(`✗ changelog 缺失: ${changelogPath}`);
-	console.error(`  先创建骨架: ./gbump -p ${pkg} -c --${mode}${mode === "set-ver" ? ` ${setVer}` : ""}`);
+	console.error(
+		`  先创建骨架: ./gcm -c -p ${pkg} --${mode}${mode === "set-ver" ? ` ${setVer}` : ""}`,
+	);
 	process.exit(1);
 }
 const content = readFileSync(changelogPath, "utf8");
@@ -250,7 +218,7 @@ const hasEntry = content
 	.split("\n")
 	.some((line) => /^\s*-\s+\S/.test(line) && !line.includes("<!--"));
 if (!hasEntry) {
-	console.error(`✗ changelog 为空（骨架不含 \"- \" 条目）: ${changelogPath}`);
+	console.error(`✗ changelog 为空（骨架不含 "- " 条目）: ${changelogPath}`);
 	console.error("  填写实质条目后再发版");
 	process.exit(1);
 }

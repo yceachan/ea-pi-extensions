@@ -7,11 +7,19 @@
 //   3. subject 校验: ≤50 字符、小写开头、无 emoji、英文
 //   4. 提交卫生: 只提交已显式暂存的内容，绝不替你 git add
 //   5. --dry: 走完整校验 + 可达性检查，但只回显构造出的命令，不落库
+//   6. -c: changelog 骨架模式——创建 changelog/<pkg>/v<ver>/log.md 并打印
+//      提交提示（发版前先写发布说明，再由本命令提交 docs(changelog):）
 //
-// 规范: docs/git提交规范.md | 版本仪式: scripts/mono-release.mjs
+// 规范: docs/git提交规范.md | 版本仪式: scripts/mono-release.mjs | 发版入口: ./gbump
 
 import { execFileSync } from "node:child_process";
-import { readdirSync } from "node:fs";
+import {
+	existsSync,
+	mkdirSync,
+	readFileSync,
+	readdirSync,
+	writeFileSync,
+} from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createInterface } from "node:readline";
@@ -40,6 +48,12 @@ const HELP = `gcm — 复合 commit message 规范入口（开发者手动运维
                          不产生实际 commit
   -y, --yes              非交互模式: 接受唯一的模糊匹配结果，跳过二次确认
   -h, --help             显示本帮助
+
+changelog 骨架模式（-c）:
+  gcm -c -p <package> [--patch | --minor | --major | --set-ver <vX.Y.Z>]
+    创建 changelog/<pkg>/v<ver>/log.md 骨架并打印提交提示（发版前写发布说明）
+    只创建文件，不碰 git、不发版；目标版本须高于该包 registry 基线
+    -p 必须是 packages/* 中的精确包名；版本参数必填
 
 行为:
   - 提交前要求暂存区非空: 请先显式 git add <path>（规范禁止 add -A / add .）
@@ -107,6 +121,9 @@ const opts = {
 	yes: false,
 	print: false,
 	dry: false,
+	changelog: false,
+	mode: null, // changelog 模式: "patch" | "minor" | "major" | "set-ver"
+	setVer: null,
 };
 
 for (let i = 0; i < argv.length; i++) {
@@ -131,6 +148,26 @@ for (let i = 0; i < argv.length; i++) {
 		opts.dry = true;
 		continue;
 	}
+	if (key === "-c" || key === "--changelog") {
+		opts.changelog = true;
+		continue;
+	}
+	if (key === "--patch" || key === "--minor" || key === "--major") {
+		if (opts.mode !== null) fail(`冲突的版本参数（已有 ${opts.mode}）`);
+		opts.mode = key.slice(2);
+		continue;
+	}
+	if (key === "--set-ver") {
+		if (opts.mode !== null) fail(`冲突的版本参数（已有 ${opts.mode}）`);
+		let value = inline;
+		if (value === undefined) {
+			value = argv[++i];
+			if (value === undefined) fail("--set-ver 需要版本值: --set-ver <vX.Y.Z>");
+		}
+		opts.setVer = value;
+		opts.mode = "set-ver";
+		continue;
+	}
 	const dest = VALUE_OPTS[key];
 	if (!dest) fail(`未知参数: ${raw}（gcm --help 查看用法）`);
 	let value = inline;
@@ -139,6 +176,12 @@ for (let i = 0; i < argv.length; i++) {
 		if (value === undefined) fail(`缺少参数值: ${key} <值>`);
 	}
 	opts[dest] = value;
+}
+
+// -c changelog 骨架模式: 独立于提交流程，先行处理。
+if (opts.changelog) {
+	await changelogMode();
+	process.exit(0);
 }
 
 // ---- type 校验 ----
@@ -156,6 +199,125 @@ if (!MANUAL_TYPES.includes(type)) {
 		);
 	}
 	fail(`未知 type: "${type}"（词表: ${MANUAL_TYPES.join(" | ")}）`);
+}
+
+// ---- changelog 骨架模式（-c）----
+
+function isValidVersion(v) {
+	return /^\d+\.\d+\.\d+$/.test(v);
+}
+
+function compareVersions(a, b) {
+	const pa = a.split(".").map(Number);
+	const pb = b.split(".").map(Number);
+	for (let i = 0; i < 3; i++) {
+		if (pa[i] !== pb[i]) return pa[i] - pb[i];
+	}
+	return 0;
+}
+
+async function registryMax(name) {
+	// registry 不可达/无有效版本 → null（跳过基线检查，仅告警）
+	try {
+		const res = await fetch(
+			`https://registry.npmjs.org/${name.replace("/", "%2F")}`,
+			{ signal: AbortSignal.timeout(10000) },
+		);
+		if (!res.ok) return null;
+		const doc = await res.json();
+		const versions = Object.keys(doc.versions ?? {}).filter(isValidVersion);
+		if (versions.length === 0) return null;
+		return versions.reduce((a, b) => (compareVersions(a, b) > 0 ? a : b));
+	} catch {
+		warn("registry 不可达，跳过基线检查");
+		return null;
+	}
+}
+
+async function changelogMode() {
+	if (
+		opts.type !== undefined ||
+		opts.message !== undefined ||
+		opts.body !== undefined ||
+		opts.print ||
+		opts.dry ||
+		opts.yes
+	) {
+		fail(
+			"-c 只接受 -p <包名> 与版本参数: --patch | --minor | --major | --set-ver <vX.Y.Z>",
+		);
+	}
+	if (opts.scope === undefined) {
+		fail(`-c 需要 -p <包名>（可用: ${packageScopes().join(", ")}）`);
+	}
+	const pkg = opts.scope;
+	if (!packageScopes().includes(pkg)) {
+		fail(`无此包: "${pkg}"——可用: ${packageScopes().join(", ")}`);
+	}
+	if (opts.mode === null) {
+		fail("-c 需要版本参数: --patch | --minor | --major | --set-ver <vX.Y.Z>");
+	}
+
+	const manifestPath = join(root, "packages", pkg, "package.json");
+	let manifest;
+	try {
+		manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+	} catch (err) {
+		fail(`无法读取 ${manifestPath}: ${err.message}`);
+	}
+	const current = manifest.version;
+	if (!isValidVersion(current)) fail(`当前版本非法: ${pkg} ${current}`);
+
+	const target =
+		opts.mode === "set-ver"
+			? (() => {
+					const v = opts.setVer;
+					if (!isValidVersion(v)) fail(`非法版本: ${v}（期望 X.Y.Z）`);
+					if (compareVersions(v, current) <= 0) {
+						fail(`目标 ${v} 不高于本地当前版本 ${current}`);
+					}
+					return v;
+				})()
+			: (() => {
+					const [major, minor, patch] = current.split(".").map(Number);
+					return opts.mode === "major"
+						? `${major + 1}.0.0`
+						: opts.mode === "minor"
+							? `${major}.${minor + 1}.0`
+							: `${major}.${minor}.${patch + 1}`;
+				})();
+
+	const base = await registryMax(`@yceachan/${pkg}`);
+	if (base !== null && compareVersions(target, base) <= 0) {
+		fail(`v${target} 不高于 registry 基线 ${base}——该版本无需新 changelog`);
+	}
+
+	const changelogPath = join(root, "changelog", pkg, `v${target}`, "log.md");
+	if (existsSync(changelogPath)) {
+		fail(`已存在，勿覆盖: ${changelogPath}`);
+	}
+	mkdirSync(dirname(changelogPath), { recursive: true });
+	writeFileSync(
+		changelogPath,
+		[
+			`# ${pkg} v${target}`,
+			"",
+			"## feat",
+			"",
+			"## fix",
+			"",
+			'<!-- 骨架：按 feat / fix / chore / ci / docs 分组填写 "- " 条目 -->',
+			`<!-- 填写完成后手工提交: ./gcm -t docs -p changelog -m "${pkg} v${target}" -->`,
+			"",
+		].join("\n"),
+	);
+	console.log(`✓ created ${changelogPath}`);
+	console.log(
+		`  填写条目后提交: ./gcm -t docs -p changelog -m "${pkg} v${target}"`,
+	);
+	const releaseArg =
+		opts.mode === "set-ver" ? `--set-ver ${target}` : `--${opts.mode}`;
+	console.log(`  随后发版: ./gbump -p ${pkg} ${releaseArg}`);
 }
 
 // ---- scope 解析（包名模糊搜索 + 二次确认）----
