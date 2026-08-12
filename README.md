@@ -23,7 +23,9 @@ actually changed.
 │   ├── pi-shelld/
 │   ├── pi-switch-cwd/
 │   └── pi-better-mermaid/
+├── gcm                      # bash entry → scripts/gcm.mjs (bun run gcm)
 ├── scripts/
+│   ├── gcm.mjs              # manual commit entry (type/scope validation, fuzzy scope pick)
 │   ├── mono-release.mjs     # lockstep bump + release commit + tag + push
 │   └── mono-sync.mjs        # version check / registry alignment
 ├── changelog/
@@ -47,6 +49,15 @@ pi install npm:@yceachan/pi-better-mermaid
 ```bash
 bun install             # install the workspace (single root bun.lock)
 bun run typecheck       # typecheck all packages
+bun run gcm             # manual commit helper (see docs/git提交规范.md)
+```
+
+Manual commits follow the convention in [`docs/git提交规范.md`](docs/git提交规范.md); the `gcm` entry
+composes and validates `type(scope): subject` and commits only what you staged:
+
+```bash
+git add packages/pi-shelld/src/…
+bun run gcm -- -t fix -p shelld -m "drain zombie shells on session end"
 ```
 
 No build step — pi loads TypeScript directly via jiti. Edit sources and `/reload` in pi.

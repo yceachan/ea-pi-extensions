@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 // mono-sync — keep the mono workspace's versions in lockstep with the npm
 // registry.
 //

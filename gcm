@@ -1,0 +1,33 @@
+#!/usr/bin/bash
+# gcm — bash 入口（开发者手动运维）。
+#
+# 转发到 scripts/gcm.mjs（复合 commit message 规范入口）:
+#   type/scope/subject 校验、包名模糊搜索 + 二次确认、提交卫生守卫。
+# 裸调用（无参数）等价于 --help；所有参数原样透传给 gcm.mjs。
+# 运行时: bun（本仓库是 bun workspace）；bun 缺失时回退 node。
+#
+# 规范: docs/git提交规范.md | 实现: scripts/gcm.mjs
+
+set -euo pipefail
+
+# 符号链接调用时 BASH_SOURCE[0] 是链接路径（如 ~/.local/bin/gcm），
+# 必须先 readlink -f 解析到真实位置，否则 gcm.mjs 定位会失败。
+SCRIPT_DIR="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
+GCM_JS="$SCRIPT_DIR/scripts/gcm.mjs"
+
+if [[ ! -f "$GCM_JS" ]]; then
+	echo "✗ $GCM_JS 不存在——gcm 需要与 scripts/gcm.mjs 同仓库（入口放在仓库根）" >&2
+	exit 1
+fi
+
+if command -v bun >/dev/null 2>&1; then
+	RUNNER=(bun)
+else
+	RUNNER=(node)
+fi
+
+if [[ $# -eq 0 ]]; then
+	exec "${RUNNER[@]}" "$GCM_JS" --help
+fi
+
+exec "${RUNNER[@]}" "$GCM_JS" "$@"

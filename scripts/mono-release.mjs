@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 // mono-release — lockstep release: bump ALL workspace packages to one shared
 // version, commit "release: vX.Y.Z", tag it, and push. CI publishes only the
 // packages that changed since the previous release commit
@@ -50,7 +50,9 @@ if (!["patch", "minor", "major"].includes(bump)) {
 const extras = args.slice(1).filter((a) => a !== "--help" && a !== "-h");
 if (extras.length > 0) {
 	console.error(`✗ unexpected argument(s): ${extras.join(", ")}`);
-	console.error("  mono-release takes exactly one argument: patch | minor | major");
+	console.error(
+		"  mono-release takes exactly one argument: patch | minor | major",
+	);
 	process.exit(1);
 }
 
@@ -139,12 +141,18 @@ if (dirty.length > 0) {
 // Guard: releasing without package changes advances the lockstep version but
 // publishes nothing, so local drifts ahead of the registry and --sync refuses
 // to downgrade. Changelog/docs/scripts changes alone don't warrant a release.
-const prevTag = runCapture(`git describe --tags --abbrev=0 HEAD 2>/dev/null || true`).trim();
+const prevTag = runCapture(
+	`git describe --tags --abbrev=0 HEAD 2>/dev/null || true`,
+).trim();
 if (prevTag) {
-	const changed = runCapture(`git diff --name-only ${prevTag}..HEAD -- packages/`).trim();
+	const changed = runCapture(
+		`git diff --name-only ${prevTag}..HEAD -- packages/`,
+	).trim();
 	if (changed.length === 0) {
 		console.error(`✗ no package changes since ${prevTag} — nothing to publish`);
-		console.error("  Changelog/docs/scripts changes alone don't warrant a release.");
+		console.error(
+			"  Changelog/docs/scripts changes alone don't warrant a release.",
+		);
 		process.exit(1);
 	}
 }
@@ -175,7 +183,9 @@ if (occupied.length > 0) {
 // are committed by hand BEFORE the release; missing ones only warn.
 const changelogPath = join(root, "changelog", `v${next}`, "log.md");
 if (!existsSync(changelogPath)) {
-	console.warn(`⚠ changelog/${`v${next}`}/log.md not found — commit release notes first`);
+	console.warn(
+		`⚠ changelog/${`v${next}`}/log.md not found — commit release notes first`,
+	);
 }
 
 for (const m of manifests) {

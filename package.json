@@ -7,13 +7,14 @@
     "packages/*"
   ],
   "scripts": {
-    "mono-sync": "node scripts/mono-sync.mjs",
-    "mono-release": "node scripts/mono-release.mjs --help",
-    "mono-release:patch": "node scripts/mono-release.mjs patch",
-    "mono-release:minor": "node scripts/mono-release.mjs minor",
-    "mono-release:major": "node scripts/mono-release.mjs major",
-    "version:check": "node scripts/mono-sync.mjs --check",
-    "version:sync": "node scripts/mono-sync.mjs --sync",
+    "gcm": "./gcm",
+    "mono-sync": "bun scripts/mono-sync.mjs",
+    "mono-release": "bun scripts/mono-release.mjs --help",
+    "mono-release:patch": "bun scripts/mono-release.mjs patch",
+    "mono-release:minor": "bun scripts/mono-release.mjs minor",
+    "mono-release:major": "bun scripts/mono-release.mjs major",
+    "version:check": "bun scripts/mono-sync.mjs --check",
+    "version:sync": "bun scripts/mono-sync.mjs --sync",
     "typecheck": "bun run --filter '*' typecheck"
   }
 }

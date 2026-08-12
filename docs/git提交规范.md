@@ -8,7 +8,7 @@ update: 2026-08-12
 # ea-pi-extensions Git 提交规范
 
 > [!note]
-> **Ref:** `../../source/AGENTS.md`（上游惯例来源，pi 仓库）| [docs/发行版本控制策略.md](发行版本控制策略.md)（版本与发布语义）| [scripts/mono-release.mjs](../scripts/mono-release.mjs) | [scripts/mono-sync.mjs](../scripts/mono-sync.mjs)
+> **Ref:** `../../source/AGENTS.md`（上游惯例来源，pi 仓库）| [docs/发行版本控制策略.md](发行版本控制策略.md)（版本与发布语义）| [scripts/gcm.mjs](../scripts/gcm.mjs)（手动提交入口）| [scripts/mono-release.mjs](../scripts/mono-release.mjs) | [scripts/mono-sync.mjs](../scripts/mono-sync.mjs)
 
 ```mermaid
 mindmap
@@ -74,6 +74,21 @@ type(scope): subject
 ### body 规则
 
 非显然的变更写 body：**问题 → 具体示例或简短追踪 → 方案**，并说明为什么这个方案是必要的。跨包改动、事故修复、设计决策必须写。技术性叙述，直接，无客套（"Thanks" 之类废话不要）。
+
+## 手动提交入口（gcm）
+
+手工提交推荐走 `scripts/gcm.mjs`（`bun run gcm`），它负责本规范的前半段自动校验：
+
+```bash
+bun run gcm -- -t fix -p shelld -m "drain zombie shells on session end"
+```
+
+- `-t` 校验词表并归一别名（`chores` → `chore`）；`release` 一律拒绝（仅 mono-release 生成）
+- `-p` 支持包名**模糊搜索**，非精确命中必须二次确认（TTY 交互选择 / 非交互 `-y`）
+- `-m` 校验 ≤50 字符、小写开头、无 emoji（违规直接拦截，中文/大写首字母告警）
+- 提交卫生由脚本强制：暂存区为空直接报错，且只提交暂存区（不替你 `git add`）
+- `--dry` 验证模式：走完整校验 + 可达性检查（在仓库内、暂存区非空），只回显构造出的完整命令不落库
+- `--print` 只输出拼好的提交信息不落库，供 agent/管道使用（与 `--dry` 同给时优先）
 
 ## 提交卫生
 
