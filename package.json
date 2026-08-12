@@ -1,15 +1,19 @@
 {
   "name": "ea-pi-extensions",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "workspaces": [
     "packages/*"
   ],
   "scripts": {
-    "release:patch": "node scripts/release.mjs patch",
-    "release:minor": "node scripts/release.mjs minor",
-    "release:major": "node scripts/release.mjs major",
+    "mono-sync": "node scripts/mono-sync.mjs",
+    "mono-release": "node scripts/mono-release.mjs --help",
+    "mono-release:patch": "node scripts/mono-release.mjs patch",
+    "mono-release:minor": "node scripts/mono-release.mjs minor",
+    "mono-release:major": "node scripts/mono-release.mjs major",
+    "version:check": "node scripts/mono-sync.mjs --check",
+    "version:sync": "node scripts/mono-sync.mjs --sync",
     "typecheck": "bun run --filter '*' typecheck"
   }
 }
