@@ -75,7 +75,10 @@ for (const pattern of workspaces) {
 		if (existsSync(path)) members.push({ path, json: readJson(path) });
 	}
 }
-const manifestPaths = [join(root, "package.json"), ...members.map((m) => m.path)];
+const manifestPaths = [
+	join(root, "package.json"),
+	...members.map((m) => m.path),
+];
 
 function readJson(path) {
 	try {
