@@ -1,6 +1,6 @@
 {
   "name": "@yceachan/pi-gadget",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "pi extension collection: /clear session archiving, /exit pi, pi_cite_wslpath WSL-link citing, and other single-file utilities",
   "keywords": [
     "pi-package",
