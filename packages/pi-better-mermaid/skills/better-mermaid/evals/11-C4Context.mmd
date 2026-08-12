@@ -1,0 +1,20 @@
+C4Context
+    title pi mermaid 渲染与校验生态
+    Person(user, "用户", "在 pi TUI 中请求画图")
+    Enterprise_Boundary(b0, "pi agent 工具链") {
+        System(tui, "pi TUI", "直接渲染 mermaid 图块")
+        System(skill, "better-mermaid skill", "起草图并按硬规则编码")
+        SystemDb(mmdc, "mmdc CLI", "mermaid-cli 11.15.0")
+        SystemQueue(gate, "校验门禁", "lint 硬规则 + 3 次重试上限")
+    }
+    System_Ext(archive, "harness-eval 目录", "归档 .mmd 源文件与 SVG")
+
+    Rel(user, tui, "请求画图", "对话")
+    Rel(tui, skill, "调用", "skill 工具")
+    Rel(skill, mmdc, "提交渲染", "mmdc")
+    Rel(mmdc, gate, "结果判定", "结构化错误")
+    Rel(gate, archive, "通过后归档", "写入")
+    BiRel(tui, user, "渲染图块")
+
+    UpdateRelStyle(user, tui, $offsetY="-30")
+    UpdateRelStyle(skill, mmdc, $offsetY="-10")

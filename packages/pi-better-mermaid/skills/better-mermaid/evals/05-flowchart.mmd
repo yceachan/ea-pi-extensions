@@ -1,0 +1,36 @@
+---
+config:
+  layout: elk
+---
+flowchart LR
+    subgraph in ["输入"]
+        direction LR
+        Src@{ shape: doc, label: "mermaid 源码" }
+        Strip@{ shape: lin-rect, label: "剥离围栏" }
+    end
+
+    subgraph check ["校验"]
+        direction LR
+        Mmd@{ shape: subroutine, label: "mmdc 渲染" }
+        SynErr{"语法错误?"}
+        Lint@{ shape: hexagon, label: "lint 硬规则" }
+        LintOk{"0 违规?"}
+        Fix@{ shape: bolt, label: "按错误修改" }
+    end
+
+    subgraph out ["交付"]
+        direction LR
+        Svg@{ shape: doc, label: "SVG 产物" }
+        Arch@{ shape: das, label: "归档 .mmd" }
+    end
+
+    Src ==> Strip
+    Strip ==> Mmd
+    Mmd ==> SynErr
+    SynErr ==>|"是"| Fix
+    Fix -. "重试最多 3 次" .-> Mmd
+    SynErr ==>|"否"| Lint
+    Lint ==> LintOk
+    LintOk ==>|"是"| Svg
+    LintOk -->|"否"| Fix
+    Svg ==> Arch

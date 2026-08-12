@@ -1,0 +1,48 @@
+classDiagram
+    namespace pi_better_mermaid {
+        class Skill {
+            <<skill>>
+            +string name
+            +string version
+            +list validate(code, type)
+        }
+        class TypeTable {
+            <<index>>
+            +list types
+            +string pick(intent)
+        }
+    }
+
+    namespace validation {
+        class MmdcCli {
+            <<validator>>
+            +string render(code)
+            +list errors
+        }
+        class LintRules {
+            <<lint>>
+            +bool noSemicolon(text)
+            +bool quotedLabels(text)
+            +bool hasAutonumber(text)
+        }
+    }
+
+    namespace references {
+        class EncodedPrefs {
+            <<doc>>
+            +string quoting
+            +string rectRule
+        }
+        class SelfCheck {
+            <<doc>>
+            +string checklist
+        }
+    }
+
+    Skill --> TypeTable : "索引"
+    Skill ..> MmdcCli : "调用"
+    Skill ..> LintRules : "执行"
+    MmdcCli ..> LintRules : "合并结果"
+    Skill --> EncodedPrefs : "遵守"
+    Skill --> SelfCheck : "自审"
+    TypeTable "1" o-- "*" EncodedPrefs : "指向"

@@ -1,0 +1,15 @@
+gantt
+    title pi-better-mermaid 能力检测计划
+    dateFormat YYYY-MM-DD
+    excludes weekends
+    section 准备
+        读取 skill 与类型参考 :done, p1, 2025-08-12, 1d
+        搭建 mmdc 校验环境 :done, p2, 2025-08-12, 1d
+    section 渲染测试
+        常用类型渲染 :active, t1, after p2, 2d
+        冷门类型渲染 :t2, after t1, 2d
+        失败重试与修复 :crit, t3, after t2, 1d
+    section 交付
+        全部归档 :milestone, m1, after t3, 0d
+        TUI 渲染验收 :crit, t4, after t3, 1d
+        生成索引文档 :t5, after t4, 1d

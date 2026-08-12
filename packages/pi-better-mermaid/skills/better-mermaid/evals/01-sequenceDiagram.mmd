@@ -1,0 +1,31 @@
+sequenceDiagram
+    autonumber
+    box "用户侧"
+        participant User as "用户"
+    end
+    box "agent 侧"
+        participant Agent as "pi agent"
+        participant Skill as "better-mermaid skill"
+        participant Mmd as "mmdc CLI"
+        participant Fs as "归档目录"
+    end
+
+    User ->> Agent: "画一张时序图"
+    Agent ->> Skill: "读取类型参考"
+    Skill -->> Agent: "语法要点 + 硬规则"
+
+    rect rgb(220, 235, 255)
+        Agent ->> Mmd: "提交 mermaid 源码"
+        alt "渲染通过"
+            Mmd -->> Agent: "SVG 产物"
+        else "语法或 lint 失败"
+            Mmd -->> Agent: "结构化错误"
+            loop "最多 3 次重试"
+                Agent ->> Agent: "按错误修改"
+            end
+        end
+    end
+
+    Agent -->> User: "交付 mermaid 图块"
+    Agent ->> Fs: "归档 .mmd 源文件"
+    Fs -->> Agent: "ok"

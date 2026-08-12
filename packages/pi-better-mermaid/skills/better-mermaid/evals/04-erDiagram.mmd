@@ -1,0 +1,45 @@
+erDiagram
+    DIAGRAM ||--o{ VALIDATION : "undergoes"
+    DIAGRAM ||--o{ RETRY : "tolerates"
+    DIAGRAM }o..o| TYPE : "belongs to"
+    TYPE ||--o{ LINT_RULE : "constrained by"
+    VALIDATION ||--o{ LINT_VIOLATION : "reports"
+
+    DIAGRAM {
+        string file_name PK
+        string mermaid_code
+        string intent "one-line modeling goal"
+        string status "draft, passed, archived"
+    }
+
+    TYPE {
+        string name PK
+        string core_role
+        string deep_dive "reference file"
+    }
+
+    LINT_RULE {
+        string id PK
+        string description
+        bool mandatory
+    }
+
+    VALIDATION {
+        int attempt PK
+        string file_name FK
+        string result "passed, failed"
+        string svg_path
+    }
+
+    RETRY {
+        int count PK
+        string file_name FK
+        string last_error
+    }
+
+    LINT_VIOLATION {
+        int id PK
+        int attempt FK
+        string rule_id FK
+        int line_no
+    }

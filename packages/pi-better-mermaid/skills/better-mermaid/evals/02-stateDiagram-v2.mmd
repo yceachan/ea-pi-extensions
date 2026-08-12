@@ -1,0 +1,27 @@
+stateDiagram-v2
+    direction LR
+    [*] --> Draft: "读取类型参考"
+
+    state Review {
+        [*] --> TypeOk: "类型匹配"
+        TypeOk --> EncOk: "引号包裹"
+        EncOk --> AutoOk: "autonumber"
+        AutoOk --> [*]: "0 违规"
+    }
+
+    Draft --> Review: "起草完成"
+    Review --> Fix: "违规大于 0"
+    Fix --> Review: "修改后复审"
+
+    Review --> Deliver: "全部通过"
+    state Guard <<choice>>
+    Deliver --> Guard
+    Guard --> Delivered: "尝试小于 3"
+    Guard --> Abandoned: "尝试等于 3"
+
+    Delivered --> Archived: "归档 .mmd"
+    Archived --> [*]: "完成"
+    Abandoned --> [*]: "重新建模"
+
+    note right of Review: "自审对照 self-check"
+    note left of Guard: "3 连败后停止重试"

@@ -1,0 +1,59 @@
+requirementDiagram
+
+    designConstraint "req_quote" {
+        id: "REQ-1"
+        text: "所有文本字面量必须用双引号包裹"
+        risk: high
+        verifymethod: inspection
+    }
+
+    designConstraint "req_semicolon" {
+        id: "REQ-2"
+        text: "任何位置不得出现分号"
+        risk: high
+        verifymethod: inspection
+    }
+
+    functionalRequirement "req_autonumber" {
+        id: "REQ-3"
+        text: "时序图必须以 autonumber 开头"
+        risk: medium
+        verifymethod: inspection
+    }
+
+    designConstraint "req_rect" {
+        id: "REQ-4"
+        text: "rect 背景色每个通道必须大于 200"
+        risk: medium
+        verifymethod: inspection
+    }
+
+    functionalRequirement "req_type" {
+        id: "REQ-5"
+        text: "图类型必须与建模意图匹配"
+        risk: low
+        verifymethod: analysis
+    }
+
+    element "lint_rules" {
+        type: "code"
+        docref: "skill lint runner"
+    }
+
+    element "skill_docs" {
+        type: "document"
+        docref: "references/encoded-preferences.md"
+    }
+
+    element "mmdc_gate" {
+        type: "tool"
+        docref: "mermaid-cli 11.15.0"
+    }
+
+    "lint_rules" - satisfies -> "req_quote"
+    "lint_rules" - satisfies -> "req_semicolon"
+    "lint_rules" - satisfies -> "req_autonumber"
+    "lint_rules" - satisfies -> "req_rect"
+    "skill_docs" - refines -> "req_type"
+    "mmdc_gate" - verifies -> "req_type"
+    "req_quote" - derives -> "req_type"

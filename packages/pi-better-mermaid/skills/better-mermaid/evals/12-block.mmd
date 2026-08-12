@@ -1,0 +1,22 @@
+block
+columns 3
+    Src[("mermaid 源码")]
+    block:check
+        columns 1
+        Mmd{"mmdc 渲染"}
+        Lint{"lint 硬规则"}
+    end
+    Svg[("SVG 产物")]
+    blockArrowId1<["校验"]>(down)
+    space
+    blockArrowId2<["交付"]>(down)
+    Retry["重试最多 3 次"]
+    space
+    Arch[("归档 .mmd")]
+
+    check --> Svg
+    Retry -.-> Mmd
+    Svg ==> Arch
+
+    style Src fill:#dde
+    style Arch fill:#dfd

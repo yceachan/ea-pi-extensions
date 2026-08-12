@@ -1,0 +1,22 @@
+gitGraph
+    commit id: "init" tag: "v0.1.0"
+    branch skill
+    checkout skill
+    commit id: "types"
+    commit id: "prefs"
+    checkout main
+    commit id: "tui"
+    merge skill tag: "v0.2.0"
+    branch validator
+    checkout validator
+    commit id: "mmdc"
+    commit id: "lint"
+    checkout main
+    commit id: "evals"
+    cherry-pick id: "lint"
+    merge validator tag: "v0.3.0"
+    checkout skill
+    commit id: "selfcheck"
+    checkout main
+    commit id: "docs" type: HIGHLIGHT
+    merge skill tag: "v0.4.0"
