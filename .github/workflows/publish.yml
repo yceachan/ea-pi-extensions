@@ -7,7 +7,7 @@ on:
 
 permissions:
   id-token: write
-  contents: read
+  contents: write   # gh release create (release page from tag)
 
 jobs:
   publish:
@@ -56,3 +56,28 @@ jobs:
                 --provenance --access public
             fi
           done
+      # A plain tag push does not create a GitHub Release page — create it
+      # here from the manual release notes (changelog/vX.Y.Z/log.md) so every
+      # tag gets a page. Idempotent: a re-run with an existing release just
+      # skips it, matching the publish loop above.
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${GITHUB_REF#refs/tags/}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "release $tag already exists — skip"
+            exit 0
+          fi
+          notes="changelog/$tag/log.md"
+          args=(--title "$tag")
+          if [ -f "$notes" ]; then
+            # Relative links in the changelog are meaningless on a release
+            # page — absolutize them against the tag.
+            base="https://github.com/${GITHUB_REPOSITORY}/blob/${tag}/packages/"
+            sed "s|(packages/|(${base}|g" "$notes" > /tmp/release-notes.md
+            args+=(--notes-file /tmp/release-notes.md)
+          else
+            args+=(--generate-notes)
+          fi
+          gh release create "$tag" "${args[@]}"
