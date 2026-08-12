@@ -23,8 +23,10 @@ A [bun](https://bun.sh) workspace monorepo for [yceachan](https://github.com/yce
 │   ├── pi-switch-cwd/
 │   └── pi-better-mermaid/
 ├── gcm                      # bash entry → scripts/gcm.mjs (bun run gcm)
+├── gbump                    # bash entry → scripts/gbump.mjs (manual release one-click)
 ├── scripts/
 │   ├── gcm.mjs              # manual commit entry (type/scope validation, fuzzy scope pick)
+│   ├── gbump.mjs            # pre-flight checks → delegates to mono-release
 │   ├── mono-release.mjs     # per-package bump + release commit + package tag + push
 │   └── mono-sync.mjs        # per-package registry-baseline check / alignment
 ├── docs/                     # 提交/发版规范 + tag 回退与 CI 容灾 runbook
@@ -70,12 +72,16 @@ No build step — pi loads TypeScript directly via jiti. Edit sources and `/relo
 Per-package versioning, tag-as-publish-instruction:
 
 ```bash
-bun run mono-release -- pi-gadget minor                # one package
-bun run mono-release -- pi-gadget minor pi-shelld patch  # several: one commit + N tags
-bun run mono-release -- pi-gadget minor --dry-run      # guards walk-through, no writes
+./gbump -p pi-gadget --minor                   # one-click: pre-flight checks then release
+./gbump -p pi-gadget --set-ver 0.5.0           # explicit target version
+./gbump -p pi-gadget -c --minor                # scaffold the changelog, prints its path
+bun run mono-release -- pi-gadget minor pi-shelld patch  # ceremony directly (skips gbump pre-flight)
 ```
 
-`scripts/mono-release.mjs` bumps only the named packages, commits
+`./gbump` is the one-click manual release entry: it enforces a clean working tree, that the
+package's local version equals its registry baseline, and that
+`changelog/<pkg>/vX.Y.Z/log.md` exists with real entries — then delegates to
+`scripts/mono-release.mjs`, which bumps only the named packages, commits
 `release: pi-gadget@0.3.0`, tags each `pi-gadget@0.3.0`, and pushes — after enforcing a
 clean working tree, that the target version is not yet on the registry for that package,
 and that the package actually changed since its last package tag. Write release notes

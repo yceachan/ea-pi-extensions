@@ -10,7 +10,8 @@
     "mono-release": "bun scripts/mono-release.mjs --help",
     "version:check": "bun scripts/mono-sync.mjs --check",
     "version:sync": "bun scripts/mono-sync.mjs --sync",
-    "typecheck": "bun run --filter '*' typecheck"
+    "typecheck": "bun run --filter '*' typecheck",
+    "gbump": "./gbump"
   },
   "private": true
 }

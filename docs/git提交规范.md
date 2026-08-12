@@ -127,6 +127,7 @@ changelog/
 ```
 
 - **手工撰写、发版前提交**（Q：为何不是脚本生成？——发布说明需要人判断，脚本只负责版本仪式）
+- 骨架生成：`./gbump -p <pkg> -c --minor` 创建 `changelog/<pkg>/vX.Y.Z/log.md` 并打印路径
 - 提交格式：`docs(changelog): pi-gadget v0.3.0`，内容按 type 分组、引用提交 subject 提炼
 - `mono-release.mjs` 只在 changelog 缺失时**告警不拦截**——规范靠自觉，脚本不强制
 - 语言：中文（与 docs 一致；README/包描述保持英文面向 gallery）

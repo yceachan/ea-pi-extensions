@@ -1,0 +1,34 @@
+#!/usr/bin/bash
+# gbump — bash 入口（开发者手动运维）。
+#
+# 转发到 scripts/gbump.mjs（手工发版一键入口）:
+#   预检（工作区干净 / 本地版本==registry 基线 / changelog 就绪）通过后，
+#   委托 scripts/mono-release.mjs 执行发版仪式。
+#   -c 模式: 创建 changelog/<pkg>/v<ver>/log.md 骨架并打印路径。
+# 裸调用（无参数）等价于 --help；所有参数原样透传给 gbump.mjs。
+# 运行时: bun（本仓库是 bun workspace）；bun 缺失时回退 node。
+#
+# 规范: docs/发行版本控制策略.md | 实现: scripts/gbump.mjs
+
+set -euo pipefail
+
+# 符号链接调用时 BASH_SOURCE[0] 是链接路径，必须先 readlink -f 解析到真实位置。
+SCRIPT_DIR="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
+GBUMP_JS="$SCRIPT_DIR/scripts/gbump.mjs"
+
+if [[ ! -f "$GBUMP_JS" ]]; then
+	echo "✗ $GBUMP_JS 不存在——gbump 需要与 scripts/gbump.mjs 同仓库（入口放在仓库根）" >&2
+	exit 1
+fi
+
+if command -v bun >/dev/null 2>&1; then
+	RUNNER=(bun)
+else
+	RUNNER=(node)
+fi
+
+if [[ $# -eq 0 ]]; then
+	exec "${RUNNER[@]}" "$GBUMP_JS" --help
+fi
+
+exec "${RUNNER[@]}" "$GBUMP_JS" "$@"

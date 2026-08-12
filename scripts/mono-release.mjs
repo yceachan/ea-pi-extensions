@@ -18,11 +18,13 @@ const HELP = `mono-release — 逐包发版仪式（bump + release 提交 + 逐�
   bun run mono-release -- --help
   bun run mono-release -- pi-gadget minor
   bun run mono-release -- pi-gadget minor pi-shelld patch
+  bun run mono-release -- pi-gadget --set-ver 0.5.0
   bun run mono-release -- pi-gadget minor --dry-run
 
 说明:
   - 逐包独立版本: 每个包按自己的变更类型推进（patch=修 bug / minor=新功能 /
-    major=破坏性），一次调用可发多包 = 一个 release 提交 + N 个 tag
+    major=破坏性），或 --set-ver 显式指定目标版本（须高于当前）；
+    一次调用可发多包 = 一个 release 提交 + N 个 tag
   - tag 格式 <pkg>@<ver>（如 pi-gadget@0.3.0）; CI 以 tag 为唯一发布指令
   - 守卫（逐包）: 干净工作区 → 目标版本未在该包 registry 存在 →
     该包自上个逐包 tag 以来有实质变更（无基线时仅告警）→
@@ -41,23 +43,52 @@ if (args.length === 0 || args.includes("--help") || args.includes("-h")) {
 }
 
 const dryRun = args.includes("--dry-run");
-const pairs = [];
-for (const a of args) {
-	if (a === "--dry-run") continue;
-	if (a.startsWith("--")) {
-		console.error(`✗ unknown argument: ${a}`);
+const items = args.filter((a) => a !== "--dry-run");
+
+// Parse per-package specs: <pkg> <bump> or <pkg> --set-ver <version>.
+const specs = [];
+for (let i = 0; i < items.length; ) {
+	const pkg = items[i];
+	if (pkg.startsWith("--")) {
+		console.error(`✗ unknown argument: ${pkg}`);
 		process.exit(1);
 	}
-	pairs.push(a);
+	if (i + 1 >= items.length) {
+		console.error(
+			`✗ missing bump after ${pkg} (expects <pkg> patch|minor|major, or <pkg> --set-ver X.Y.Z)`,
+		);
+		process.exit(1);
+	}
+	const spec = items[i + 1];
+	if (spec === "--set-ver") {
+		if (i + 2 >= items.length || items[i + 2].startsWith("--")) {
+			console.error("✗ --set-ver requires a version: <pkg> --set-ver X.Y.Z");
+			process.exit(1);
+		}
+		specs.push({ pkg, bump: null, setVer: items[i + 2] });
+		i += 3;
+	} else {
+		specs.push({ pkg, bump: spec, setVer: null });
+		i += 2;
+	}
 }
-if (pairs.length === 0 || pairs.length % 2 !== 0) {
+if (specs.length === 0) {
 	console.error(
-		"✗ expects an even list of <pkg> <bump> pairs, e.g. \"mono-release -- pi-gadget minor\"",
+		"✗ expects at least one package, e.g. \"mono-release -- pi-gadget minor\"",
 	);
 	process.exit(1);
 }
 
 const BUMPS = new Set(["patch", "minor", "major"]);
+
+function compareVersions(a, b) {
+	const pa = a.split(".").map(Number);
+	const pb = b.split(".").map(Number);
+	for (let i = 0; i < 3; i++) {
+		if (pa[i] !== pb[i]) return pa[i] - pb[i];
+	}
+	return 0;
+}
 
 function readJson(path) {
 	try {
@@ -110,20 +141,16 @@ async function alreadyPublished(name, version) {
 	}
 }
 
-// Resolve each pair into a plan entry: { pkg, bump, manifest, from, to, tag }.
+// Resolve each spec into a plan entry: { pkg, bump, manifest, from, to, tag }.
 const plans = [];
 const seen = new Set();
-for (let i = 0; i < pairs.length; i += 2) {
-	const [pkg, bump] = [pairs[i], pairs[i + 1]];
+for (const spec of specs) {
+	const { pkg, bump, setVer } = spec;
 	if (seen.has(pkg)) {
 		console.error(`✗ package listed twice: ${pkg}`);
 		process.exit(1);
 	}
 	seen.add(pkg);
-	if (!BUMPS.has(bump)) {
-		console.error(`✗ invalid bump for ${pkg}: ${bump} (expects patch|minor|major)`);
-		process.exit(1);
-	}
 	const manifestPath = join(root, "packages", pkg, "package.json");
 	if (!existsSync(manifestPath)) {
 		console.error(`✗ no such package: ${pkg} (${manifestPath})`);
@@ -134,16 +161,37 @@ for (let i = 0; i < pairs.length; i += 2) {
 		console.error(`✗ invalid current version for ${pkg}: ${json.version}`);
 		process.exit(1);
 	}
-	const [major, minor, patch] = json.version.split(".").map(Number);
-	const to =
-		bump === "major"
-			? `${major + 1}.0.0`
-			: bump === "minor"
-				? `${major}.${minor + 1}.0`
-				: `${major}.${minor}.${patch + 1}`;
+	let to;
+	if (setVer !== null) {
+		if (!isValidVersion(setVer)) {
+			console.error(`✗ invalid version for ${pkg}: ${setVer} (expects X.Y.Z)`);
+			process.exit(1);
+		}
+		if (compareVersions(setVer, json.version) <= 0) {
+			console.error(
+				`✗ target ${setVer} is not greater than current ${json.version} for ${pkg}`,
+			);
+			process.exit(1);
+		}
+		to = setVer;
+	} else {
+		if (!BUMPS.has(bump)) {
+			console.error(
+				`✗ invalid bump for ${pkg}: ${bump} (expects patch|minor|major)`,
+			);
+			process.exit(1);
+		}
+		const [major, minor, patch] = json.version.split(".").map(Number);
+		to =
+			bump === "major"
+				? `${major + 1}.0.0`
+				: bump === "minor"
+					? `${major}.${minor + 1}.0`
+					: `${major}.${minor}.${patch + 1}`;
+	}
 	plans.push({
 		pkg,
-		bump,
+		bump: bump ?? `--set-ver ${setVer}`,
 		manifestPath,
 		json,
 		from: json.version,
