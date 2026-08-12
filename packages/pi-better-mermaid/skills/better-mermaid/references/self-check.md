@@ -19,7 +19,7 @@ If the answer to "what is this diagram supposed to make legible?" is more than o
 | "state / transition / enters / exits / on event"       | `stateDiagram-v2`               |
 | "has-a / inherits / implements / type / field / method"| `classDiagram`                  |
 | "entity / key / relationship / cardinality / FK"       | `erDiagram`                     |
-| "command / event / read-model / swimlane / timeline"   | `eventmodeling`                 |
+| "command / event / read-model / swimlane / timeline"   | ~~`eventmodeling`~~ DEPRECATED — use `sequenceDiagram` (with `box` / `alt`) |
 | "requirement / satisfies / verifies / risk"            | `requirementDiagram`            |
 | "branch / merge / rebase / tag"                        | `gitGraph`                      |
 | "anything else — decision tree, pipeline, dispatch"    | `flowchart`                     |
@@ -45,7 +45,6 @@ Each type has primitives that distinguish *modeling* from *doodling*. If the dra
 | `erDiagram`         | identifying vs non-identifying (`||--||` vs `||..o{`), attribute keys (PK/FK), aliases |
 | `flowchart`         | subgraph, > 1 node shape, edge labels, direction nesting (`subgraph X direction TB`) |
 | `requirementDiagram`| typed requirements (`functionalRequirement` / `performanceRequirement`), `risk`, `verifymethod`, `satisfies` / `verifies` links |
-| `eventmodeling`     | swimlanes, multiple time-frame types (`ui` / `cmd` / `evt` / `view`), inline data |
 
 A `sequenceDiagram` of pure `A->>B: x` lines is the canonical doodle. At minimum add `note` and one `alt` / `loop` block to make it earn its place.
 

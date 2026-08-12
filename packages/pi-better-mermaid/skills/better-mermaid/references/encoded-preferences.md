@@ -145,5 +145,5 @@ If you find yourself adding a *second* logical concern to a diagram (e.g., timin
 | Any `;` anywhere                                                              | Newline or `<br/>`.                                                                  |
 | `flowchart` for an actor-to-actor message sequence                            | `sequenceDiagram`.                                                                   |
 | `flowchart` modelling a state machine ("idle → running → done")               | `stateDiagram-v2`.                                                                   |
-| Single node holds > 4 distinct responsibilities                               | Split or move to `classDiagram` / `eventmodeling`.                                   |
+| Single node holds > 4 distinct responsibilities                               | Split or move to `classDiagram`.                                                  |
 | Mixed-abstraction-level top-level boxes (one says "TCP", another says "ack")  | Pull lower-abstraction parts into a subgraph or a separate diagram.                  |

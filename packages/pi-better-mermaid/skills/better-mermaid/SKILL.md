@@ -47,13 +47,13 @@ This is the index. Read the row, pick the type, then open the referenced file. *
 | `sankey-beta`         | Flow magnitude between stages                       | Traffic split, energy / memory budget, conversion funnels    | mermaid-docs/syntax/sankey.md                           | —                                                |
 | `xychart-beta`        | Inline line / bar chart                             | Benchmark numbers, latency-over-time                         | mermaid-docs/syntax/xyChart.md                          | —                                                |
 
-The rightmost columns without a "Deep dive" entry are **rarely the right tool** in this repo — fall back to the upstream doc only when one of them is genuinely the best fit. The seven types with deep-dive files are the ones the author writes frequently.
+The rightmost columns without a "Deep dive" entry are **rarely the right tool** in this repo — fall back to the upstream doc only when one of them is genuinely the best fit. The six types with deep-dive files (eventmodeling's deep dive is retained but deprecated) are the ones the author writes frequently.
 
 ## Hard preferences — non-negotiable
 
 These are encoded in [`references/encoded-preferences.md`](references/encoded-preferences.md) with full reasoning. Summary:
 
-- **Engine: 11.15.0** (recently updated). Syntax gated as `v11.x+` is now safe to use — namespaces in classDiagram, eventmodeling, central connections in sequenceDiagram, expanded flowchart shapes, sequenceNumber start/increment, etc.
+- **Engine: 11.15.0** (recently updated). Syntax gated as `v11.x+` is now safe to use — namespaces in classDiagram, central connections in sequenceDiagram, expanded flowchart shapes, sequenceNumber start/increment, etc. (`eventmodeling` is **deprecated** — it renders an error page on 11.15.0, see harness-eval record.)
 - **Wrap every text literal in `""`** — node labels, edge labels, sequence messages, notes, participant aliases. *Every one*, even pure ASCII. Reason: mixed-CJK / parens / slashes have repeatedly broken rendering; uniform quoting is the only stable posture.
 - **Never use `;`** — neither as a statement separator nor inside labels. Replace with newlines or `<br/>`. Reason: layouts have historically truncated on `;`.
 - **`sequenceDiagram` MUST start with `autonumber`** — numbered messages are how the surrounding prose references the diagram.
@@ -100,7 +100,7 @@ skills/better-mermaid/ （本包捆绑）
     │   ├── state.md
     │   ├── er.md
     │   ├── requirement.md
-    │   └── eventmodeling.md
+    │   └── eventmodeling.md      (DEPRECATED — renders error page on 11.15.0)
     └── mermaid-docs/                (upstream v11.15 docs, sparse-clone)
         ├── syntax/*.md              (authoritative for any type)
         ├── config/                  (theming, layouts, mermaidCLI)

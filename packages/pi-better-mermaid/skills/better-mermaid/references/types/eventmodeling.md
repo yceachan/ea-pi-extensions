@@ -1,5 +1,11 @@
 # eventmodeling — deep dive (v11.15.0+)
 
+> ⚠ **DEPRECATED — 2025-08-13**: mermaid@11.15.0 renders this diagram as an
+> error page (SVG contains "Syntax error in text"); mmdc exits 0 so the old
+> gate passed it — that false-positive is now fixed. Do **not** deliver
+> `eventmodeling` diagrams; model CQRS / event flows with `sequenceDiagram`
+> (`box` groups + `alt` / `loop` blocks). This file is kept for reference only.
+
 **Upstream:** `references/mermaid-docs/syntax/eventmodeling.md`
 
 **Core role.** Event-storming / event-modeling style timeline: a horizontal sequence of *time frames* organized into swimlanes — UI, Command, Event, View/ReadModel. Makes information flow over time legible.

@@ -27,7 +27,7 @@ import type {
 	ExtensionAPI,
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "@earendil-works/pi-ai";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -209,7 +209,7 @@ export default function betterMermaidExtension(pi: ExtensionAPI) {
 			type: Type.Optional(
 				Type.String({
 					description:
-						"可选：期望的图类型（sequenceDiagram / stateDiagram-v2 / classDiagram / erDiagram / flowchart / requirementDiagram / gitGraph / timeline / gantt / mindmap / C4Context / block / journey / quadrantChart / sankey-beta / xychart-beta / eventmodeling）。lint 会校验其与代码图头一致",
+						"可选：期望的图类型（sequenceDiagram / stateDiagram-v2 / classDiagram / erDiagram / flowchart / requirementDiagram / gitGraph / timeline / gantt / mindmap / C4Context / block / journey / quadrantChart / sankey-beta / xychart-beta / eventmodeling（已弃用，11.15.0 渲染错误页））。lint 会校验其与代码图头一致",
 				}),
 			),
 			mermaid: Type.String({
@@ -296,6 +296,18 @@ export default function betterMermaidExtension(pi: ExtensionAPI) {
 			const durationMs = Date.now() - startedAt;
 
 			if (result.code === 0) {
+				// Gate the gate: mmdc can exit 0 while the SVG is a mermaid
+				// error page (eventmodeling on 11.15.0 renders exactly that).
+				// "Rendered" != "rendered correctly" — treat error pages as failures.
+				// Match the actual error <text> element / message, not the CSS rule
+				// `.error-text{...}` that ships in every mermaid SVG template.
+				const svg = readFileSync(svgPath, "utf8");
+				if (/Syntax error in text|<text[^>]*class="error-text"/.test(svg)) {
+					return fail(state, [], {
+						excerpt:
+							"mmdc exited 0 but the SVG is a mermaid error page — renderer failed (eventmodeling is deprecated on 11.15.0)",
+					});
+				}
 				stateBySession.delete(sessionKey);
 				const warning = versionWarning ? `\n⚠️ ${versionWarning}` : "";
 				return {

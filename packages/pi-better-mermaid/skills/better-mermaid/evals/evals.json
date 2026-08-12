@@ -46,20 +46,6 @@
         "The diagram clearly names all four entities: tspi-rk3566-sdk (or the outer SDK), kernel-6.1, u-boot, buildroot",
         "The diagram conveys the 'independent git repo' aspect via visual cues — annotation, distinct shape/style, note, or distinct grouping (not just plain edges)"
       ]
-    },
-    {
-      "id": 3,
-      "name": "cqrs-eventmodeling",
-      "prompt": "我在写 CQRS 学习笔记，需要一个图：用户点'提交订单'按钮 → SubmitOrder 命令 → OrderSubmitted 事件 → 更新订单 View。用 mermaid 给我画一下。",
-      "expected_output": "An `eventmodeling` diagram (v11.15+ syntax) with time frames in distinct swimlanes: ui (按钮), cmd (SubmitOrder), evt (OrderSubmitted), view (订单 View). Should use the swimlane semantics that eventmodeling provides — NOT a generic flowchart with 4 boxes. Quoting + no semicolons.",
-      "files": [],
-      "expectations": [
-        "The mermaid block uses the `eventmodeling` diagram type (v11.15+), not `flowchart` / `graph` / `sequenceDiagram`",
-        "The diagram contains all four swimlane types: a `ui` time frame, a `cmd` (or `command`) time frame, an `evt` (or `event`) time frame, and a `view` (or `readmodel`) time frame",
-        "Time-frame labels and inline data (if present) follow the project's quoting discipline — names and string values wrapped in double quotes where the syntax accepts them",
-        "The diagram contains zero semicolon characters",
-        "Time frames are referenced by unique numeric IDs"
-      ]
     }
   ]
 }
