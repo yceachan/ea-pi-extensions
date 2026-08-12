@@ -42,8 +42,17 @@ jobs:
         run: |
           for pkg in $CHANGED; do
             if [ -f "packages/$pkg/package.json" ]; then
-              echo "Publishing @yceachan/$pkg"
-              npm publish --workspace="@yceachan/$pkg" \
+              name="@yceachan/$pkg"
+              ver="$(node -p "require('./packages/$pkg/package.json').version")"
+              # Idempotent retry: skip versions already on the registry, so a
+              # partially failed run can be safely re-run (rerun would
+              # otherwise die with EPUBLISHCONFLICT on published packages).
+              if npm view "$name@$ver" version >/dev/null 2>&1; then
+                echo "skip $name@$ver (already published)"
+                continue
+              fi
+              echo "Publishing $name@$ver"
+              npm publish --workspace="$name" \
                 --provenance --access public
             fi
           done
