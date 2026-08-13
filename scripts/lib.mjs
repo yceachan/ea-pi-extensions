@@ -42,6 +42,38 @@ export function writeJson(path, value) {
 	writeFileSync(path, JSON.stringify(value, null, 2) + "\n");
 }
 
+// Surgical sync of bun.lock's workspace version fields for the given
+// { pkg -> version } entries. bun.lock (lockfileVersion 1) records each
+// workspace member's version; a release bump must follow it into the lock
+// WITHOUT a full `bun install`, which could re-resolve "latest"
+// devDependencies and drag unrelated changes into the release commit.
+// The edit is exactly the one-line change a plain bun install would make
+// (verified: bun install produces zero further diff after this runs).
+export function syncLockfileWorkspaceVersions(lockPath, entries) {
+	const lines = readFileSync(lockPath, "utf8").split("\n");
+	let pending = Object.keys(entries).length;
+	for (let i = 0; i < lines.length && pending > 0; i++) {
+		const m = lines[i].match(/^\s*"packages\/([a-z0-9-]+)":\s*\{/);
+		if (!m || !(m[1] in entries)) continue;
+		const versionIdx = lines
+			.slice(i + 1, i + 4)
+			.findIndex((l) => l.includes('"version"'));
+		if (versionIdx === -1) continue;
+		lines[i + 1 + versionIdx] = lines[i + 1 + versionIdx].replace(
+			/(\s*"version":\s*)"[^"]*"/,
+			`$1"${entries[m[1]]}"`,
+		);
+		pending--;
+	}
+	if (pending > 0) {
+		console.error(
+			`✗ bun.lock sync incomplete (${pending} workspace version field(s) not found)`,
+		);
+		process.exit(1);
+	}
+	writeFileSync(lockPath, lines.join("\n"));
+}
+
 // Raw registry document with reachability info, or null only on hard failure.
 async function fetchRegistry(name) {
 	try {

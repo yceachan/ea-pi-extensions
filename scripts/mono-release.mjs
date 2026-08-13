@@ -1,8 +1,9 @@
 #!/usr/bin/env bun
 // mono-release — per-package release ceremony: bump ONLY the named packages,
-// commit one "release: <tag1>, <tag2>..." commit, tag each package with
-// "<pkg>@<ver>", and push. Each tag is its own publish instruction; CI
-// (publish.yml) parses the tag and publishes exactly that package@version.
+// surgically sync bun.lock's workspace version fields, commit one
+// "release: <tag1>, <tag2>..." commit, tag each package with "<pkg>@<ver>",
+// and push. Each tag is its own publish instruction; CI (publish.yml)
+// parses the tag and publishes exactly that package@version.
 //
 // Per-package model (see docs/发行版本控制策略.md): packages share no version;
 // each advances its own semver by its own change type.
@@ -18,10 +19,11 @@ import {
 	readJson,
 	registryBaseline,
 	runCapture,
+	syncLockfileWorkspaceVersions,
 	writeJson,
 } from "./lib.mjs";
 
-const HELP = `mono-release — 逐包发版仪式（bump + release 提交 + 逐包 tag + push）
+const HELP = `mono-release — 逐包发版仪式（bump + 锁文件同步 + release 提交 + 逐包 tag + push）
 
 用法:
   bun run mono-release -- --help
@@ -272,6 +274,9 @@ for (const plan of plans) {
 }
 const commitMessage = `release: ${plans.map((p) => p.tag).join(", ")}`;
 console.log(`  commit: ${commitMessage}`);
+console.log(
+	`  bun.lock: 同步 workspace 版本字段（${plans.map((p) => p.pkg).join(", ")}）`,
+);
 console.log("─".repeat(60));
 
 if (dryRun) {
@@ -284,7 +289,15 @@ for (const plan of plans) {
 	writeJson(plan.manifestPath, plan.json);
 }
 
-run(`git add ${plans.map((p) => p.manifestPath).join(" ")}`);
+// 锁文件跟随: bun.lock 记录每个 workspace 成员的 version。只做手术式字段
+// 改写（等价于 bun install 会写的那一行），不跑 bun install——避免 devDeps
+// 的 "latest" 被重新解析、把无关依赖变动夹带进 release 提交。
+syncLockfileWorkspaceVersions(
+	join(root, "bun.lock"),
+	Object.fromEntries(plans.map((p) => [p.pkg, p.to])),
+);
+
+run(`git add ${plans.map((p) => p.manifestPath).join(" ")} bun.lock`);
 run(`git commit -m "${commitMessage}"`);
 for (const plan of plans) run(`git tag ${plan.tag}`);
 run(`git push && git push --tags`);

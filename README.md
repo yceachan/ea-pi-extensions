@@ -82,7 +82,8 @@ bun run mono-release -- pi-gadget minor pi-shelld patch  # ceremony directly (sa
 `scripts/mono-release.mjs`, which enforces a clean working tree, that the package's
 local version equals its registry baseline, that `changelog/<pkg>/vX.Y.Z/log.md`
 exists with real entries, and that the package actually changed since its last
-package tag — then bumps only the named packages, commits `release: pi-gadget@0.3.0`,
+package tag — then bumps only the named packages, syncs `bun.lock`'s workspace
+version fields, commits `release: pi-gadget@0.3.0`,
 tags each `pi-gadget@0.3.0`, and pushes. Write release notes first:
 `./gcm -c -p <pkg> --minor` scaffolds `changelog/<pkg>/vX.Y.Z/log.md`, which you fill
 in and commit as `docs(changelog): <pkg> vX.Y.Z`.
