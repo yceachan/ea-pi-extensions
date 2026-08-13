@@ -20,7 +20,12 @@
   "homepage": "https://github.com/yceachan/ea-pi-extensions#readme",
   "files": [
     "extensions",
-    "skills",
+    "skills/better-mermaid/SKILL.md",
+    "skills/better-mermaid/evals",
+    "skills/better-mermaid/references/types",
+    "skills/better-mermaid/references/encoded-preferences.md",
+    "skills/better-mermaid/references/self-check.md",
+    "skills/better-mermaid/references/mermaid-docs/syntax",
     "README.md"
   ],
   "publishConfig": {
