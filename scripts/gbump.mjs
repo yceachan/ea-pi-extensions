@@ -11,7 +11,14 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { execSync, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
+import {
+	compareVersions,
+	gitDirty,
+	isValidVersion,
+	readJson,
+	registryBaseline,
+} from "./lib.mjs";
 
 const HELP = `gbump — 手工发版一键入口（预检 → 委托 mono-release 仪式）
 
@@ -78,58 +85,12 @@ function fail(msg) {
 }
 
 // ── 工具函数 ─────────────────────────────────────────────────────────────
-function readJson(path) {
-	try {
-		return JSON.parse(readFileSync(path, "utf8"));
-	} catch (err) {
-		console.error(`✗ cannot read ${path}: ${err.message}`);
-		process.exit(1);
-	}
-}
-
-function runCapture(cmd) {
-	try {
-		return execSync(cmd, { cwd: root, encoding: "utf8" });
-	} catch {
-		return "";
-	}
-}
-
-function isValidVersion(v) {
-	return /^\d+\.\d+\.\d+$/.test(v);
-}
-
-function compareVersions(a, b) {
-	const pa = a.split(".").map(Number);
-	const pb = b.split(".").map(Number);
-	for (let i = 0; i < 3; i++) {
-		if (pa[i] !== pb[i]) return pa[i] - pb[i];
-	}
-	return 0;
-}
-
 function packages() {
 	const dir = join(root, "packages");
 	return readdirSync(dir, { withFileTypes: true })
 		.filter((e) => e.isDirectory() && e.name !== "node_modules")
 		.map((e) => e.name)
 		.filter((name) => existsSync(join(dir, name, "package.json")));
-}
-
-async function registryMax(name) {
-	try {
-		const res = await fetch(
-			`https://registry.npmjs.org/${name.replace("/", "%2F")}`,
-			{ signal: AbortSignal.timeout(10000) },
-		);
-		if (!res.ok) return null;
-		const doc = await res.json();
-		const versions = Object.keys(doc.versions ?? {}).filter(isValidVersion);
-		if (versions.length === 0) return null;
-		return versions.reduce((a, b) => (compareVersions(a, b) > 0 ? a : b));
-	} catch {
-		return "unreachable";
-	}
 }
 
 // ── 包与目标版本 ─────────────────────────────────────────────────────────
@@ -171,24 +132,24 @@ const target =
 			})();
 
 // ── 预检 2: 本地版本 == registry 基线 ─────────────────────────────────────
-const base = await registryMax(`@yceachan/${pkg}`);
-if (base === null) {
+const base = await registryBaseline(`@yceachan/${pkg}`);
+if (base.status === "unknown") {
 	console.warn(
 		`⚠ registry 无 @yceachan/${pkg} 版本记录（新包需先种子发布，见策略文档）`,
 	);
-} else if (base === "unreachable") {
+} else if (base.status === "unreachable") {
 	console.warn("⚠ registry unreachable; skipping baseline consistency check");
-} else if (compareVersions(current, base) < 0) {
+} else if (compareVersions(current, base.max) < 0) {
 	console.error(
-		`✗ ${pkg} 本地 ${current} 落后 registry 基线 ${base} ——先对齐:`,
+		`✗ ${pkg} 本地 ${current} 落后 registry 基线 ${base.max} ——先对齐:`,
 	);
 	console.error(
 		"    bun run version:sync -- --dry-run   （确认后去掉 --dry-run）",
 	);
 	process.exit(1);
-} else if (compareVersions(current, base) > 0) {
+} else if (compareVersions(current, base.max) > 0) {
 	console.error(
-		`✗ ${pkg} 本地 ${current} 领先 registry 基线 ${base} ——发版未完成?`,
+		`✗ ${pkg} 本地 ${current} 领先 registry 基线 ${base.max} ——发版未完成?`,
 	);
 	console.error("  按 docs/tag回退与CI容灾.md 处理失败的发布，不要继续发版");
 	process.exit(1);
@@ -198,7 +159,7 @@ if (base === null) {
 const changelogPath = join(root, "changelog", pkg, `v${target}`, "log.md");
 
 // ── 预检 1: monorepo 干净 ────────────────────────────────────────────────
-const dirty = runCapture(`git status --porcelain`).trim();
+const dirty = gitDirty(root);
 if (dirty.length > 0) {
 	console.error("✗ working tree is not clean — commit or stash first:");
 	for (const line of dirty.split("\n").slice(0, 10)) console.error(`  ${line}`);

@@ -8,9 +8,18 @@
 // each advances its own semver by its own change type.
 
 import { execSync } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+	compareVersions,
+	gitDirty,
+	isPublished,
+	isValidVersion,
+	readJson,
+	runCapture,
+	writeJson,
+} from "./lib.mjs";
 
 const HELP = `mono-release — 逐包发版仪式（bump + release 提交 + 逐包 tag + push）
 
@@ -88,63 +97,12 @@ if (specs.length === 0) {
 
 const BUMPS = new Set(["patch", "minor", "major"]);
 
-function compareVersions(a, b) {
-	const pa = a.split(".").map(Number);
-	const pb = b.split(".").map(Number);
-	for (let i = 0; i < 3; i++) {
-		if (pa[i] !== pb[i]) return pa[i] - pb[i];
-	}
-	return 0;
-}
-
-function readJson(path) {
-	try {
-		return JSON.parse(readFileSync(path, "utf8"));
-	} catch (err) {
-		console.error(`✗ cannot read ${path}: ${err.message}`);
-		process.exit(1);
-	}
-}
-
-function writeJson(path, value) {
-	writeFileSync(path, JSON.stringify(value, null, 2) + "\n");
-}
-
 function run(cmd) {
 	try {
 		execSync(cmd, { cwd: root, stdio: "inherit" });
 	} catch {
 		console.error(`✗ command failed: ${cmd}`);
 		process.exit(1);
-	}
-}
-
-function runCapture(cmd) {
-	try {
-		return execSync(cmd, { cwd: root, encoding: "utf8" });
-	} catch {
-		return "";
-	}
-}
-
-function isValidVersion(version) {
-	return /^\d+\.\d+\.\d+$/.test(version);
-}
-
-async function alreadyPublished(name, version) {
-	try {
-		const res = await fetch(
-			`https://registry.npmjs.org/${name.replace("/", "%2F")}`,
-			{ signal: AbortSignal.timeout(10000) },
-		);
-		if (!res.ok) return false;
-		const doc = await res.json();
-		return Object.keys(doc.versions ?? {}).some(
-			(v) => isValidVersion(v) && v === version,
-		);
-	} catch {
-		console.warn("⚠ registry unreachable; skipping pre-flight version check");
-		return false;
 	}
 }
 
@@ -208,7 +166,7 @@ for (const spec of specs) {
 }
 
 // ── Guard 1: clean working tree ──────────────────────────────────────────
-const dirty = runCapture(`git status --porcelain`).trim();
+const dirty = gitDirty(root);
 if (dirty.length > 0) {
 	console.error("✗ working tree is not clean — commit or stash first:");
 	for (const line of dirty.split("\n").slice(0, 10)) console.error(`  ${line}`);
@@ -220,23 +178,28 @@ let failed = false;
 for (const plan of plans) {
 	// Guard 2: target version must not already exist on the registry for
 	// this package (a hit means local is behind the registry baseline).
-	if (await alreadyPublished(`@yceachan/${plan.pkg}`, plan.to)) {
+	const published = await isPublished(`@yceachan/${plan.pkg}`, plan.to);
+	if (published.published) {
 		console.error(
 			`✗ @yceachan/${plan.pkg}@${plan.to} already published — local is behind`,
 		);
 		console.error("  the registry baseline. Align first:");
 		console.error("    bun run version:sync -- --dry-run");
 		failed = true;
+	} else if (published.unreachable) {
+		console.warn("⚠ registry unreachable; skipping pre-flight version check");
 	}
 
 	// Guard 3: the package must have changed since its last package tag.
 	// No prior <pkg>@* tag = first per-package release → no baseline, warn only.
 	const lastTag = runCapture(
 		`git describe --match "${plan.pkg}@*" --abbrev=0 HEAD 2>/dev/null || true`,
+		root,
 	).trim();
 	if (lastTag) {
 		const changed = runCapture(
 			`git diff --name-only ${lastTag}..HEAD -- packages/${plan.pkg}/`,
+			root,
 		).trim();
 		if (changed.length === 0) {
 			console.error(
@@ -259,7 +222,9 @@ for (const plan of plans) {
 	}
 
 	// Guard 5: the tag must not already exist locally.
-	if (runCapture(`git rev-parse -q --verify "refs/tags/${plan.tag}"`).trim()) {
+	if (
+		runCapture(`git rev-parse -q --verify "refs/tags/${plan.tag}"`, root).trim()
+	) {
 		console.error(`✗ local tag already exists: ${plan.tag}`);
 		failed = true;
 	}

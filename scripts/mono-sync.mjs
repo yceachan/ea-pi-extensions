@@ -15,10 +15,17 @@
 // that is behind its registry baseline up to that baseline. A package ahead
 // of its baseline means an unfinished release; --sync refuses to downgrade.
 
-import { readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { readdirSync } from "node:fs";
 import { execSync, spawnSync } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+	compareVersions,
+	isValidVersion,
+	readJson,
+	registryBaseline,
+	writeJson,
+} from "./lib.mjs";
 
 const HELP = `mono-sync — 逐包检查 / 对齐 registry 基线
 
@@ -58,17 +65,13 @@ if (unknown.length > 0) {
 	process.exit(1);
 }
 
-function readJson(path) {
-	try {
-		return JSON.parse(readFileSync(path, "utf8"));
-	} catch (err) {
-		console.error(`✗ cannot read ${path}: ${err.message}`);
+async function baselineFor(name) {
+	const b = await registryBaseline(name);
+	if (b.status === "unreachable") {
+		console.error(`✗ cannot reach registry for ${name}`);
 		process.exit(1);
 	}
-}
-
-function writeJson(path, value) {
-	writeFileSync(path, JSON.stringify(value, null, 2) + "\n");
+	return b.max; // null when the package was never seeded
 }
 
 function packageMembers() {
@@ -84,40 +87,10 @@ function packageMembers() {
 	return members;
 }
 
-function isValidVersion(version) {
-	return /^\d+\.\d+\.\d+$/.test(version);
-}
-
-function compareVersions(a, b) {
-	const pa = a.split(".").map(Number);
-	const pb = b.split(".").map(Number);
-	for (let i = 0; i < 3; i++) {
-		if (pa[i] !== pb[i]) return pa[i] - pb[i];
-	}
-	return 0;
-}
-
-async function highestPublished(name) {
-	try {
-		const res = await fetch(
-			`https://registry.npmjs.org/${name.replace("/", "%2F")}`,
-			{ signal: AbortSignal.timeout(10000) },
-		);
-		if (!res.ok) return null;
-		const doc = await res.json();
-		const versions = Object.keys(doc.versions ?? {}).filter(isValidVersion);
-		if (versions.length === 0) return null;
-		return versions.reduce((a, b) => (compareVersions(a, b) > 0 ? a : b));
-	} catch {
-		console.error(`✗ cannot reach registry for ${name}`);
-		process.exit(1);
-	}
-}
-
 const members = packageMembers();
 const baselines = new Map();
 for (const m of members) {
-	baselines.set(m.pkg, await highestPublished(`@yceachan/${m.pkg}`));
+	baselines.set(m.pkg, await baselineFor(`@yceachan/${m.pkg}`));
 }
 
 const rows = members.map((m) => {

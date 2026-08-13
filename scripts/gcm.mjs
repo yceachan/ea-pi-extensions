@@ -23,6 +23,11 @@ import {
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createInterface } from "node:readline";
+import {
+	compareVersions,
+	isValidVersion,
+	registryBaseline,
+} from "./lib.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -203,37 +208,6 @@ if (!MANUAL_TYPES.includes(type)) {
 
 // ---- changelog 骨架模式（-c）----
 
-function isValidVersion(v) {
-	return /^\d+\.\d+\.\d+$/.test(v);
-}
-
-function compareVersions(a, b) {
-	const pa = a.split(".").map(Number);
-	const pb = b.split(".").map(Number);
-	for (let i = 0; i < 3; i++) {
-		if (pa[i] !== pb[i]) return pa[i] - pb[i];
-	}
-	return 0;
-}
-
-async function registryMax(name) {
-	// registry 不可达/无有效版本 → null（跳过基线检查，仅告警）
-	try {
-		const res = await fetch(
-			`https://registry.npmjs.org/${name.replace("/", "%2F")}`,
-			{ signal: AbortSignal.timeout(10000) },
-		);
-		if (!res.ok) return null;
-		const doc = await res.json();
-		const versions = Object.keys(doc.versions ?? {}).filter(isValidVersion);
-		if (versions.length === 0) return null;
-		return versions.reduce((a, b) => (compareVersions(a, b) > 0 ? a : b));
-	} catch {
-		warn("registry 不可达，跳过基线检查");
-		return null;
-	}
-}
-
 async function changelogMode() {
 	if (
 		opts.type !== undefined ||
@@ -287,9 +261,11 @@ async function changelogMode() {
 							: `${major}.${minor}.${patch + 1}`;
 				})();
 
-	const base = await registryMax(`@yceachan/${pkg}`);
-	if (base !== null && compareVersions(target, base) <= 0) {
-		fail(`v${target} 不高于 registry 基线 ${base}——该版本无需新 changelog`);
+	const base = await registryBaseline(`@yceachan/${pkg}`);
+	if (base.status === "unreachable") {
+		warn("registry 不可达，跳过基线检查");
+	} else if (base.status === "ok" && compareVersions(target, base.max) <= 0) {
+		fail(`v${target} 不高于 registry 基线 ${base.max}——该版本无需新 changelog`);
 	}
 
 	const changelogPath = join(root, "changelog", pkg, `v${target}`, "log.md");
