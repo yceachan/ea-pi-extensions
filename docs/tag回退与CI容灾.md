@@ -93,7 +93,7 @@ git push && git push --tags     # 手工补推
 npm view @yceachan/pi-gadget@0.3.0 version      # 期望报错（不存在）
 
 # 2. 本地版本复位到该包 registry 基线（最高已发布版本）
-bun run mono-sync -- --reset                     # 把领先包写回 registry 基线（失败发布的官方复位入口）
+bun run mono-tagcheck -- --reset                 # 把领先包写回 registry 基线（失败发布的官方复位入口）
 
 # 3. 删 tag（本地 + 远端）
 git tag -d pi-gadget@0.3.0 && git push origin :refs/tags/pi-gadget@0.3.0

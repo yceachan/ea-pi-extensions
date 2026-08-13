@@ -1,9 +1,9 @@
 // lib.mjs — shared utilities for the release scripts.
 //
 // One registry query implementation, one semver comparison, one JSON/read-write
-// helper: gcm/gbump/mono-release/mono-sync previously each carried its own copy
-// of these, so a fix had to be applied four times and a single release flow
-// queried the npm registry three times.
+// helper: gcm/gbump/mono-release/mono-tagcheck previously each carried its own
+// copy of these, so a fix had to be applied four times and a single release
+// flow queried the npm registry three times.
 //
 // The registry helpers distinguish three states so callers can keep their
 // distinct warnings without re-implementing the fetch:

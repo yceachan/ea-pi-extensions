@@ -28,7 +28,7 @@ A [bun](https://bun.sh) workspace monorepo for [yceachan](https://github.com/yce
 │   ├── gcm.mjs              # manual commit entry (type/scope validation, fuzzy scope pick)
 │   ├── gbump.mjs            # pre-flight checks → delegates to mono-release
 │   ├── mono-release.mjs     # per-package bump + release commit + package tag + push
-│   └── mono-sync.mjs        # per-package registry-baseline check / alignment
+│   └── mono-tagcheck.mjs    # per-package version-number check/align/reset (no git writes)
 ├── docs/                     # 提交/发版规范 + tag 回退与 CI 容灾 runbook
 │   ├── git提交规范.md
 │   ├── 发行版本控制策略.md
@@ -91,13 +91,13 @@ The `publish.yml` workflow (trigger: tags matching `*@*`) parses the tag, verifi
 package with `npm publish --provenance` (OIDC trusted publishing). A `workflow_dispatch`
 dry-run entry runs the same validation without publishing — use it to test pipeline changes.
 
-`bun run mono-sync` shows each package's local version against its registry baseline;
-`bun run mono-sync -- --sync` aligns any package that lags behind, automatically
+`bun run mono-tagcheck` shows each package's local version against its registry baseline;
+`bun run mono-tagcheck -- --sync` aligns any package that lags behind, automatically
 refreshes the workspace with `bun install` (so `bun.lock` follows), and reports the
-changed files and dirty-tree state — review and commit before releasing.
-After a failed (zero-publish) release, `bun run mono-sync -- --reset` rewrites an
-ahead package back to its published baseline; the runbook
-(`docs/tag回退与CI容灾.md`) walks the full recovery.
+changed files and dirty-tree state — it only ever adjusts version numbers in manifests,
+never commits/tags/pushes. After a failed (zero-publish) release,
+`bun run mono-tagcheck -- --reset` rewrites an ahead package back to its published
+baseline; the runbook (`docs/tag回退与CI容灾.md`) walks the full recovery.
 
 Prerequisite (one-time): configure npm [Trusted Publishers](https://docs.npmjs.com/trusted-publishers/)
 for each package — repository `yceachan/ea-pi-extensions`, workflow `publish.yml`.

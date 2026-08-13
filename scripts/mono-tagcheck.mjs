@@ -1,24 +1,27 @@
 #!/usr/bin/env bun
-// mono-sync — per-package alignment with the npm registry.
+// mono-tagcheck — per-package version-NUMBER tool. Version control it is not.
 //
-// Packages share no version under the per-package model; each one must not
-// fall behind its own registry baseline (its highest published version).
-// This helper checks, reports, aligns (--sync) or resets (--reset) each
-// package's manifest version to that baseline. --sync/--reset also refresh
-// the workspace automatically (bun install, so bun.lock matches the aligned
-// manifests) and then report the resulting local file changes / dirty-tree
-// state. It never performs git WRITE operations (scripts/mono-release.mjs
-// owns the commit/tag/push part of a release) — git status is read-only and
-// only used for the report.
+// 它只做一件事：检查 / 调整各包 package.json 里的 version 号，使之与
+// 该包在 npm registry 的基线（= 最高已发布版本，即历史逐包 tag 所对应的
+// 事实状态）一致。
 //
-// Advancing versions is release semantics — that belongs to mono-release.
-// The two actions that CHANGE versions here:
-//   --sync  aligns a package that is BEHIND its registry baseline up to it;
-//   --reset rewrites a package that is AHEAD (a failed, unpublished release)
-//           back down to its published baseline — the only sanctioned
-//           downward move, and the target is always an already-published
-//           version, so nothing new can be created by accident.
-// --sync refuses to downgrade; --reset refuses while anything is behind.
+// 明确不做：
+//   - 不做任何包版本控制——不 git commit、不 git tag、不 git push、不建分支。
+//     发版仪式（bump → 提交 → 逐包 tag → push）属于 scripts/mono-release.mjs；
+//     git 在这里只有只读 status，仅用于报告工作区是否变脏。
+//   - 不提供 bump / --set——推进版本号是 release 语义，归 mono-release。
+//
+// 模式：
+//   裸跑      版本表：每包本地 version vs 其 registry 基线
+//   --check   门禁：有包低于基线 exit 1（领先仅告警）
+//   --sync    落后包对齐基线（只上调 version 号）+ 自动 bun install 刷新
+//             bun.lock + 只读 git status 报告变动
+//   --reset   失败发布后：领先包复位回基线（只下调到已发布版本，永不产生
+//             新版本）+ 同款刷新报告
+//   --dry-run 预览不写入
+//
+// 改写 version 号后：bun install 使 bun.lock 与 manifest 一致；脏状态报告
+// 由开发者审查后按提交规范提交（git 写操作永远不在这里发生）。
 
 import { readdirSync } from "node:fs";
 import { execSync, spawnSync } from "node:child_process";
@@ -32,15 +35,22 @@ import {
 	writeJson,
 } from "./lib.mjs";
 
-const HELP = `mono-sync — 逐包检查 / 对齐 registry 基线
+const HELP = `mono-tagcheck — 逐包 version 号检查 / 对齐 registry 基线（只动版本号，不做版本控制）
+
+定位:
+  - 只调整各包 package.json 的 version 号，对齐对象是 registry 基线（该包
+    最高已发布版本，即历史逐包 tag 对应的事实状态）
+  - 不做任何包版本控制: 不 commit / 不 tag / 不 push / 不建分支——发版仪式
+    归 mono-release（bump → 提交 → 逐包 tag → push）
+  - 不提供 bump / --set: 推进版本号是 release 语义，归 mono-release
 
 用法:
-  bun run mono-sync                    显示每包本地版本 vs registry 基线
-  bun run mono-sync -- --check         门禁（有包低于基线时 exit 1）
-  bun run mono-sync -- --sync          落后包对齐基线 + 自动刷新 workspace + 报告变动
-  bun run mono-sync -- --reset         失败发布后：领先包复位回基线 + 自动刷新 workspace
-  bun run mono-sync -- --sync --dry-run  预览不写入
-  bun run mono-sync -- --help          显示本帮助
+  bun run mono-tagcheck                    显示每包本地版本 vs registry 基线
+  bun run mono-tagcheck -- --check         门禁（有包低于基线时 exit 1）
+  bun run mono-tagcheck -- --sync          落后包对齐基线 + 自动刷新 workspace + 报告变动
+  bun run mono-tagcheck -- --reset         失败发布后：领先包复位回基线 + 自动刷新 workspace
+  bun run mono-tagcheck -- --sync --dry-run  预览不写入
+  bun run mono-tagcheck -- --help          显示本帮助
 
 说明:
   - 覆盖对象: packages/*（根 manifest 无版本，不参与）
@@ -50,7 +60,6 @@ const HELP = `mono-sync — 逐包检查 / 对齐 registry 基线
     报告本地文件变动与仓库脏状态（只读 git status，不做任何 git 写操作）
   - --reset: 只复位领先包（本地 > 基线）回基线；有落后包时拒绝（先 --sync）——
     目标必是已发布的基线版本，永不产生新版本；与 --sync 互斥
-  - 不提供 bump / --set: 推进版本号是 mono-release 的职责
 `;
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -70,7 +79,7 @@ const known = ["--dry-run", "--check", "--sync", "--reset", "--help", "-h"];
 const unknown = args.filter((a) => !known.includes(a));
 if (unknown.length > 0) {
 	console.error(`✗ unknown argument(s): ${unknown.join(", ")}`);
-	console.error("  Run mono-sync --help for usage.");
+	console.error("  Run mono-tagcheck --help for usage.");
 	process.exit(1);
 }
 if (doSync && doReset) {
@@ -78,6 +87,7 @@ if (doSync && doReset) {
 	process.exit(1);
 }
 
+// ── 只读视图：每包本地 version 号 vs 其 registry 基线 ─────────────────────
 async function baselineFor(name) {
 	const b = await registryBaseline(name);
 	if (b.status === "unreachable") {
@@ -134,7 +144,9 @@ if (behind.length === 0 && ahead.length === 0) {
 	if (behind.length > 0) {
 		console.log(`✗ 落后基线: ${behind.map((r) => r.pkg).join(", ")}`);
 		if (!doSync) {
-			console.log("  → bun run mono-sync -- --sync 对齐并自动刷新 workspace");
+			console.log(
+				"  → bun run mono-tagcheck -- --sync 对齐并自动刷新 workspace",
+			);
 		}
 	}
 	if (ahead.length > 0)
@@ -147,6 +159,7 @@ if (doCheck) {
 	process.exit(behind.length > 0 ? 1 : 0);
 }
 
+// ── 版本号改写：--sync 只上调 / --reset 只下调到已发布版本 ─────────────────
 if (doSync) {
 	if (ahead.length > 0) {
 		console.error(
@@ -187,7 +200,7 @@ if (doReset) {
 			`✗ ${behind.map((r) => r.pkg).join(", ")} 落后 registry 基线——`,
 		);
 		console.error(
-			"  先 bun run mono-sync -- --sync 对齐落后包，再考虑复位",
+			"  先 bun run mono-tagcheck -- --sync 对齐落后包，再考虑复位",
 		);
 		process.exit(1);
 	}
@@ -213,10 +226,11 @@ if (doReset) {
 	refreshWorkspace();
 }
 
-// 自动刷新 workspace: bun install 使 bun.lock 与改写后的 manifest 版本一致，
-// 然后只读 git status 报告本地文件变动与脏状态（不做任何 git 写操作）。
-// （bun update <workspace 成员> 对已发布成员会报 DependencyLoop，bun install
-//   是 bun 原生的一致性对账入口——只重算锁文件，不改依赖 spec。）
+// ── 工作区刷新与只读报告（无任何 git 写操作） ─────────────────────────────
+// bun install 使 bun.lock 与改写后的 manifest 版本一致，然后只读 git status
+// 报告本地文件变动与脏状态。（bun update <workspace 成员> 对已发布成员会报
+// DependencyLoop，bun install 是 bun 原生的一致性对账入口——只重算锁文件，
+// 不改依赖 spec。）
 function refreshWorkspace() {
 	console.log("─".repeat(52));
 	console.log("⧗ 自动刷新 workspace（bun install，对齐 bun.lock）...");
