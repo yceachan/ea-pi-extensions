@@ -8,15 +8,15 @@
 // each advances its own semver by its own change type.
 
 import { execSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
 	compareVersions,
 	gitDirty,
-	isPublished,
 	isValidVersion,
 	readJson,
+	registryBaseline,
 	runCapture,
 	writeJson,
 } from "./lib.mjs";
@@ -35,9 +35,9 @@ const HELP = `mono-release — 逐包发版仪式（bump + release 提交 + 逐�
     major=破坏性），或 --set-ver 显式指定目标版本（须高于当前）；
     一次调用可发多包 = 一个 release 提交 + N 个 tag
   - tag 格式 <pkg>@<ver>（如 pi-gadget@0.3.0）; CI 以 tag 为唯一发布指令
-  - 守卫（逐包）: 干净工作区 → 目标版本未在该包 registry 存在 →
-    该包自上个逐包 tag 以来有实质变更（无基线时仅告警）→
-    changelog/<pkg>/v<ver>/log.md 缺失仅告警
+  - 守卫: 干净工作区 → 逐包（本地版本 == registry 基线 → 该包自上个逐包
+    tag 以来有实质变更（无基线时仅告警）→ changelog/<pkg>/v<ver>/log.md
+    已存在且含实质条目 → tag 未在本地存在）
   - --dry-run: 完整走查守卫并打印计划，不写文件、不碰 git
 
 前置条件: git 远端已配置; changelog 按纪律手工提交（docs/changelog: 见提交规范）
@@ -173,21 +173,38 @@ if (dirty.length > 0) {
 	process.exit(1);
 }
 
-// ── Guards 2–4: per package ──────────────────────────────────────────────
+// ── Guards 2–5: per package ──────────────────────────────────────────────
 let failed = false;
 for (const plan of plans) {
-	// Guard 2: target version must not already exist on the registry for
-	// this package (a hit means local is behind the registry baseline).
-	const published = await isPublished(`@yceachan/${plan.pkg}`, plan.to);
-	if (published.published) {
-		console.error(
-			`✗ @yceachan/${plan.pkg}@${plan.to} already published — local is behind`,
+	// Guard 2: the local version must equal this package's registry
+	// baseline. A release always starts from the baseline, so the bumped
+	// target is necessarily unpublished — this one check covers both the
+	// "local behind" and the "unfinished release" failure modes (the
+	// former gbump precheck 2) and makes a separate target-already-
+	// published check redundant.
+	const base = await registryBaseline(`@yceachan/${plan.pkg}`);
+	if (base.status === "unreachable") {
+		console.warn("⚠ registry unreachable; skipping baseline consistency check");
+	} else if (base.status === "unknown") {
+		console.warn(
+			`⚠ @yceachan/${plan.pkg} has no registry versions — seed the first release manually first`,
 		);
-		console.error("  the registry baseline. Align first:");
-		console.error("    bun run version:sync -- --dry-run");
+	} else if (compareVersions(plan.from, base.max) < 0) {
+		console.error(
+			`✗ ${plan.pkg} 本地 ${plan.from} 落后 registry 基线 ${base.max} ——先对齐:`,
+		);
+		console.error(
+			"    bun run version:sync -- --dry-run   （确认后去掉 --dry-run）",
+		);
 		failed = true;
-	} else if (published.unreachable) {
-		console.warn("⚠ registry unreachable; skipping pre-flight version check");
+	} else if (compareVersions(plan.from, base.max) > 0) {
+		console.error(
+			`✗ ${plan.pkg} 本地 ${plan.from} 领先 registry 基线 ${base.max} ——发版未完成?`,
+		);
+		console.error(
+			"  按 docs/tag回退与CI容灾.md 处理失败的发布，不要继续发版",
+		);
+		failed = true;
 	}
 
 	// Guard 3: the package must have changed since its last package tag.
@@ -213,12 +230,27 @@ for (const plan of plans) {
 		);
 	}
 
-	// Guard 4: changelog discipline — missing notes only warn (manual, see
-	// docs/git提交规范.md).
-	if (!existsSync(join(root, "changelog", plan.pkg, `v${plan.to}`, "log.md"))) {
-		console.warn(
-			`⚠ changelog/${plan.pkg}/v${plan.to}/log.md not found — commit release notes first`,
-		);
+	// Guard 4: changelog discipline — the target version's release notes
+	// must exist AND contain real entries (the gcm -c skeleton has none,
+	// so an unfilled scaffold cannot ship).
+	const notes = join(root, "changelog", plan.pkg, `v${plan.to}`, "log.md");
+	const modeHint = plan.bump.startsWith("--set-ver")
+		? plan.bump
+		: `--${plan.bump}`;
+	if (!existsSync(notes)) {
+		console.error(`✗ changelog 缺失: ${notes}`);
+		console.error(`  先创建骨架: ./gcm -c -p ${plan.pkg} ${modeHint}`);
+		failed = true;
+	} else {
+		const content = readFileSync(notes, "utf8");
+		const hasEntry = content
+			.split("\n")
+			.some((line) => /^\s*-\s+\S/.test(line) && !line.includes("<!--"));
+		if (!hasEntry) {
+			console.error(`✗ changelog 为空（骨架不含 "- " 条目）: ${notes}`);
+			console.error("  填写实质条目后再发版");
+			failed = true;
+		}
 	}
 
 	// Guard 5: the tag must not already exist locally.

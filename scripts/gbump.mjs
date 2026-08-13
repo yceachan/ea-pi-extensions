@@ -1,51 +1,54 @@
 #!/usr/bin/env bun
-// gbump — 手工发版一键入口（预检 → 委托 mono-release 发版仪式）。
+// gbump — 手工发版一键入口（薄壳）。
 //
-// 三项预检全部通过才执行发版仪式:
-//   1. monorepo 干净（git status --porcelain 为空）
-//   2. 包本地版本 == 其 registry 基线（落后 → 提示 version:sync；领先 → 提示容灾）
-//   3. changelog/<pkg>/v<ver>/log.md 已存在且含实质条目（骨架由 ./gcm -c 生成）
+// 只做 gbump 命令行参数 → mono-release 位置参数的翻译，然后直接委托
+// scripts/mono-release.mjs 执行发版仪式。旧 gbump 的三项预检（干净工作区 /
+// 本地版本 == registry 基线 / changelog 就绪且非空）已并入 mono-release
+// 的守卫——守卫与发版仪式全仓库只有一份实现。
 //
-// 发版仪式本身由 scripts/mono-release.mjs 执行（bump/--set-ver → 提交 → tag → push）。
+// changelog 骨架由 ./gcm -c 创建（见 scripts/gcm.mjs）。
+//
+// 规范: docs/发行版本控制策略.md | 实现: scripts/mono-release.mjs
 
-import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
-import {
-	compareVersions,
-	gitDirty,
-	isValidVersion,
-	readJson,
-	registryBaseline,
-} from "./lib.mjs";
-
-const HELP = `gbump — 手工发版一键入口（预检 → 委托 mono-release 仪式）
-
-用法:
-  ./gbump -p <package> [--patch | --minor | --major | --set-ver <vX.Y.Z>]
-  ./gbump -p <package> [--patch | --minor | --major | --set-ver <vX.Y.Z>] --dry-run
-  ./gbump --help
-
-预检（全部通过才执行发版仪式）:
-  1. monorepo 干净（git status --porcelain 为空）
-  2. 包本地版本 == 其 registry 基线
-     落后 → 先 bun run version:sync；领先 → 发版未完成，按容灾手册处理
-  3. changelog/<pkg>/v<ver>/log.md 已存在且含实质条目
-     骨架由 ./gcm -c 生成，不含 "- " 条目——须手工填写实质条目
-
-发版仪式: bun scripts/mono-release.mjs <pkg> <bump|--set-ver <ver>>
-`;
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+
+const HELP = `gbump — 手工发版一键入口（等价 mono-release 完整守卫 + 发版仪式）
+
+用法:
+  ./gbump -p <package> [--patch | --minor | --major | --set-ver <X.Y.Z>] [--dry-run]
+  ./gbump --help
+
+说明:
+  - 薄壳: 把 gbump 参数翻译为 mono-release 的位置参数后直接委托
+    scripts/mono-release.mjs；守卫与发版仪式全在 mono-release 一份实现
+  - 守卫（mono-release）: 干净工作区 → 逐包（本地版本 == registry 基线 →
+    自上个逐包 tag 有实质变更（无基线仅告警）→ changelog/<pkg>/v<ver>/log.md
+    已存在且含实质条目 → tag 未在本地存在）
+  - changelog 骨架由 ./gcm -c 创建（见 scripts/gcm.mjs）
+`;
+
 const args = process.argv.slice(2);
 
-if (args.length === 0 || args.includes("--help") || args.includes("-h")) {
+// --help/-h only win when they are the ONLY arguments (same rule as
+// mono-release — a stray help flag must never swallow a release command).
+const helpOnly =
+	args.length > 0 && args.every((a) => a === "--help" || a === "-h");
+if (args.length === 0 || helpOnly) {
 	console.log(HELP);
 	process.exit(args.length === 0 ? 1 : 0);
 }
 
-// ── 参数解析 ─────────────────────────────────────────────────────────────
+function fail(msg) {
+	console.error(`✗ ${msg}`);
+	console.error("  Run ./gbump --help for usage.");
+	process.exit(1);
+}
+
+// ── gbump flags → mono-release positional args ────────────────────────────
 let pkg = null;
 let dryRun = false;
 let mode = null; // "patch" | "minor" | "major" | "set-ver"
@@ -75,122 +78,14 @@ for (let i = 0; i < args.length; i++) {
 if (pkg === null) fail("-p <package> is required");
 if (mode === null)
 	fail(
-		"missing version flag: --patch | --minor | --major | --set-ver <vX.Y.Z>",
+		"missing version flag: --patch | --minor | --major | --set-ver <X.Y.Z>",
 	);
 
-function fail(msg) {
-	console.error(`✗ ${msg}`);
-	console.error("  Run ./gbump --help for usage.");
-	process.exit(1);
-}
-
-// ── 工具函数 ─────────────────────────────────────────────────────────────
-function packages() {
-	const dir = join(root, "packages");
-	return readdirSync(dir, { withFileTypes: true })
-		.filter((e) => e.isDirectory() && e.name !== "node_modules")
-		.map((e) => e.name)
-		.filter((name) => existsSync(join(dir, name, "package.json")));
-}
-
-// ── 包与目标版本 ─────────────────────────────────────────────────────────
-const manifestPath = join(root, "packages", pkg, "package.json");
-if (!existsSync(manifestPath)) {
-	console.error(`✗ no such package: ${pkg}`);
-	console.error(`  available: ${packages().join(", ")}`);
-	process.exit(1);
-}
-const manifest = readJson(manifestPath);
-if (!isValidVersion(manifest.version)) {
-	console.error(`✗ invalid current version for ${pkg}: ${manifest.version}`);
-	process.exit(1);
-}
-const current = manifest.version;
-
-const target =
-	mode === "set-ver"
-		? (() => {
-				if (!isValidVersion(setVer)) {
-					console.error(`✗ invalid version: ${setVer} (expects X.Y.Z)`);
-					process.exit(1);
-				}
-				if (compareVersions(setVer, current) <= 0) {
-					console.error(
-						`✗ target ${setVer} is not greater than current ${current}`,
-					);
-					process.exit(1);
-				}
-				return setVer;
-			})()
-		: (() => {
-				const [major, minor, patch] = current.split(".").map(Number);
-				return mode === "major"
-					? `${major + 1}.0.0`
-					: mode === "minor"
-						? `${major}.${minor + 1}.0`
-						: `${major}.${minor}.${patch + 1}`;
-			})();
-
-// ── 预检 2: 本地版本 == registry 基线 ─────────────────────────────────────
-const base = await registryBaseline(`@yceachan/${pkg}`);
-if (base.status === "unknown") {
-	console.warn(
-		`⚠ registry 无 @yceachan/${pkg} 版本记录（新包需先种子发布，见策略文档）`,
-	);
-} else if (base.status === "unreachable") {
-	console.warn("⚠ registry unreachable; skipping baseline consistency check");
-} else if (compareVersions(current, base.max) < 0) {
-	console.error(
-		`✗ ${pkg} 本地 ${current} 落后 registry 基线 ${base.max} ——先对齐:`,
-	);
-	console.error(
-		"    bun run version:sync -- --dry-run   （确认后去掉 --dry-run）",
-	);
-	process.exit(1);
-} else if (compareVersions(current, base.max) > 0) {
-	console.error(
-		`✗ ${pkg} 本地 ${current} 领先 registry 基线 ${base.max} ——发版未完成?`,
-	);
-	console.error("  按 docs/tag回退与CI容灾.md 处理失败的发布，不要继续发版");
-	process.exit(1);
-}
-
-// ── changelog ────────────────────────────────────────────────────────────
-const changelogPath = join(root, "changelog", pkg, `v${target}`, "log.md");
-
-// ── 预检 1: monorepo 干净 ────────────────────────────────────────────────
-const dirty = gitDirty(root);
-if (dirty.length > 0) {
-	console.error("✗ working tree is not clean — commit or stash first:");
-	for (const line of dirty.split("\n").slice(0, 10)) console.error(`  ${line}`);
-	process.exit(1);
-}
-
-// ── 预检 3: changelog 已就绪且含实质条目 ───────────────────────────────────
-if (!existsSync(changelogPath)) {
-	console.error(`✗ changelog 缺失: ${changelogPath}`);
-	console.error(
-		`  先创建骨架: ./gcm -c -p ${pkg} --${mode}${mode === "set-ver" ? ` ${setVer}` : ""}`,
-	);
-	process.exit(1);
-}
-const content = readFileSync(changelogPath, "utf8");
-const hasEntry = content
-	.split("\n")
-	.some((line) => /^\s*-\s+\S/.test(line) && !line.includes("<!--"));
-if (!hasEntry) {
-	console.error(`✗ changelog 为空（骨架不含 "- " 条目）: ${changelogPath}`);
-	console.error("  填写实质条目后再发版");
-	process.exit(1);
-}
-
-console.log("─".repeat(56));
-console.log(`  ✓ 预检通过: ${pkg} ${current} → ${target} (${mode})`);
-console.log("─".repeat(56));
-
-// ── 委托 mono-release 执行发版仪式 ─────────────────────────────────────────
-const spec = mode === "set-ver" ? ["--set-ver", setVer] : [mode];
-const mArgs = [pkg, ...spec, ...(dryRun ? ["--dry-run"] : [])];
+const mArgs = [
+	pkg,
+	...(mode === "set-ver" ? ["--set-ver", setVer] : [mode]),
+	...(dryRun ? ["--dry-run"] : []),
+];
 const res = spawnSync("bun", ["scripts/mono-release.mjs", ...mArgs], {
 	cwd: root,
 	stdio: "inherit",
