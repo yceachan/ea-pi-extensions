@@ -37,7 +37,14 @@ const HELP = `mono-release — 逐包发版仪式（bump + release 提交 + 逐�
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);
 
-if (args.length === 0 || args.includes("--help") || args.includes("-h")) {
+// --help/-h only win when they are the ONLY arguments. A stray help flag
+// must never swallow real release specs: the package.json run-script entry
+// used to inject --help into argv, so every documented
+// `bun run mono-release -- <pkg> <bump>` printed help and exited 0 without
+// releasing.
+const helpOnly =
+	args.length > 0 && args.every((a) => a === "--help" || a === "-h");
+if (args.length === 0 || helpOnly) {
 	console.log(HELP);
 	process.exit(args.length === 0 ? 1 : 0);
 }
