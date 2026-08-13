@@ -8,7 +8,7 @@ update: 2026-08-12
 # ea-pi-extensions Git 提交规范
 
 > [!note]
-> **Ref:** `../../source/AGENTS.md`（上游惯例来源，pi 仓库）| [docs/发行版本控制策略.md](发行版本控制策略.md)（版本与发布语义）| [scripts/gcm.mjs](../scripts/gcm.mjs)（手动提交入口）| [scripts/mono-release.mjs](../scripts/mono-release.mjs) | [scripts/mono-tagcheck.mjs](../scripts/mono-tagcheck.mjs)
+> **Ref:** `../../source/AGENTS.md`（上游惯例来源，pi 仓库）| [AGENTS.md](../AGENTS.md)（agent 执行层纪律）| [docs/发行版本控制策略.md](发行版本控制策略.md)（版本与发布语义）| [scripts/gcm.mjs](../scripts/gcm.mjs)（手动提交入口）| [scripts/mono-release.mjs](../scripts/mono-release.mjs) | [scripts/mono-tagcheck.mjs](../scripts/mono-tagcheck.mjs)
 
 ```mermaid
 mindmap
