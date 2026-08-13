@@ -127,8 +127,9 @@ npm login && npm publish --workspace=@yceachan/<pkg> --provenance --access publi
 
 ### 场景 D：版本已消费且想"跳过"→ 死路
 
-失败后想直接 bump 到下一版本绕过：**前置守卫会拦截**——目标版本已在该包 registry 存在。
-这是设计使然，不是 bug。唯一出路：等**新的包内容变更**落地后再发版（新版本未发布，正常通过）。
+失败后想直接 bump 到下一版本绕过：**变更守卫会拦截**——该包自上个逐包 tag 以来无实质
+变更，不发版。这是设计使然，不是 bug。唯一出路：等**新的包内容变更**落地后再发版
+（新版本未发布，正常通过），或按场景 C 幂等 rerun。
 
 ## 容灾三支柱
 
@@ -136,7 +137,7 @@ npm login && npm publish --workspace=@yceachan/<pkg> --provenance --access publi
 | --- | --- | --- |
 | 幂等 publish | `publish.yml` | `npm view` 存在即跳过——失败 = rerun 一次，不再是事故 |
 | 变更守卫 | `mono-release.mjs` | 包自上个逐包 tag 无变更不发版——堵死"bump 绕过失败"的路径（无基线时降级为告警） |
-| 版本前置守卫 | `mono-release.mjs` | 目标版本已存在于该包即中止——发布前拦截撞版本 |
+| 版本前置守卫 | `mono-release.mjs` | 本地版本必须等于该包 registry 基线——从基线起跳使目标必然未发布，发布前拦截撞版本 |
 
 三者互补成闭环：发布前拦截（前置守卫）→ 发布中可重试（幂等）→ 发布后不许绕过（变更守卫）。
 

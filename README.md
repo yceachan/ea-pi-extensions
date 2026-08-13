@@ -75,19 +75,17 @@ Per-package versioning, tag-as-publish-instruction:
 ./gbump -p pi-gadget --minor                   # one-click: pre-flight checks then release
 ./gbump -p pi-gadget --set-ver 0.5.0           # explicit target version
 ./gcm -c -p pi-gadget --minor                  # scaffold the changelog, prints path + commit hint
-bun run mono-release -- pi-gadget minor pi-shelld patch  # ceremony directly (skips gbump pre-flight)
+bun run mono-release -- pi-gadget minor pi-shelld patch  # ceremony directly (same built-in guards as gbump)
 ```
 
-`./gbump` is the one-click manual release entry: it enforces a clean working tree, that the
-package's local version equals its registry baseline, and that
-`changelog/<pkg>/vX.Y.Z/log.md` exists with real entries — then delegates to
-`scripts/mono-release.mjs`, which bumps only the named packages, commits
-`release: pi-gadget@0.3.0`, tags each `pi-gadget@0.3.0`, and pushes — after enforcing a
-clean working tree, that the target version is not yet on the registry for that package,
-and that the package actually changed since its last package tag. Write release notes
-first: `./gcm -c -p <pkg> --minor` scaffolds
-`changelog/<pkg>/vX.Y.Z/log.md`, which you fill in and commit as
-`docs(changelog): <pkg> vX.Y.Z`.
+`./gbump` is the one-click manual release entry: a thin wrapper that delegates to
+`scripts/mono-release.mjs`, which enforces a clean working tree, that the package's
+local version equals its registry baseline, that `changelog/<pkg>/vX.Y.Z/log.md`
+exists with real entries, and that the package actually changed since its last
+package tag — then bumps only the named packages, commits `release: pi-gadget@0.3.0`,
+tags each `pi-gadget@0.3.0`, and pushes. Write release notes first:
+`./gcm -c -p <pkg> --minor` scaffolds `changelog/<pkg>/vX.Y.Z/log.md`, which you fill
+in and commit as `docs(changelog): <pkg> vX.Y.Z`.
 The `publish.yml` workflow (trigger: tags matching `*@*`) parses the tag, verifies
 `packages/<pkg>/package.json` matches the tag version, and publishes exactly that
 package with `npm publish --provenance` (OIDC trusted publishing). A `workflow_dispatch`

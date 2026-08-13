@@ -114,8 +114,8 @@ release: pi-gadget@0.3.0, pi-shelld@0.1.2      ← 多包同发（一提交 + N 
 - 版本号只允许两条路径改动：`mono-sync`（`--sync`：对齐 manifest + `bun install` 刷新
   bun.lock）与 `mono-release`（bump + 提交 + tag + push）
 - **禁止手写 `release:` 提交、禁止手工改 package.json 版本号**（绕过守卫 = 撞版本）
-- 脚本内置守卫：干净工作区、目标版本未在该包 registry 存在、该包自上个逐包 tag 以来
-  有实质变更（无基线时仅告警）——被拦时按提示处理，不要绕过
+- 脚本内置守卫：干净工作区、本地版本 == 该包 registry 基线、该包自上个逐包 tag 以来
+  有实质变更（无基线时仅告警）、changelog 已存在且含实质条目——被拦时按提示处理，不要绕过
 - 逐包 tag 格式 `<pkg>@<ver>`（如 `pi-gadget@0.3.0`），tag 自身即 CI 发布指令
 - 发版完整仪式见 [发行版本控制策略.md](发行版本控制策略.md)
 
@@ -134,7 +134,8 @@ changelog/
 - **手工撰写、发版前提交**（Q：为何不是脚本生成？——发布说明需要人判断，脚本只负责版本仪式）
 - 骨架生成：`./gcm -c -p <pkg> --minor` 创建 `changelog/<pkg>/vX.Y.Z/log.md` 并打印提交提示
 - 提交格式：`docs(changelog): pi-gadget v0.3.0`，内容按 type 分组、引用提交 subject 提炼
-- `mono-release.mjs` 只在 changelog 缺失时**告警不拦截**——规范靠自觉，脚本不强制
+- `mono-release.mjs` 硬性要求 `changelog/<pkg>/v<ver>/log.md` 已存在且含实质
+  `-` 条目（`gcm -c` 的空骨架不含条目，会被拦下）
 - 语言：中文（与 docs 一致；README/包描述保持英文面向 gallery）
 
 ```text
