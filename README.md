@@ -95,6 +95,9 @@ dry-run entry runs the same validation without publishing — use it to test pip
 `bun run mono-sync -- --sync` aligns any package that lags behind, automatically
 refreshes the workspace with `bun install` (so `bun.lock` follows), and reports the
 changed files and dirty-tree state — review and commit before releasing.
+After a failed (zero-publish) release, `bun run mono-sync -- --reset` rewrites an
+ahead package back to its published baseline; the runbook
+(`docs/tag回退与CI容灾.md`) walks the full recovery.
 
 Prerequisite (one-time): configure npm [Trusted Publishers](https://docs.npmjs.com/trusted-publishers/)
 for each package — repository `yceachan/ea-pi-extensions`, workflow `publish.yml`.

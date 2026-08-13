@@ -111,8 +111,9 @@ release: pi-gadget@0.3.0                       ← 单包发版
 release: pi-gadget@0.3.0, pi-shelld@0.1.2      ← 多包同发（一提交 + N 个 tag）
 ```
 
-- 版本号只允许两条路径改动：`mono-sync`（`--sync`：对齐 manifest + `bun install` 刷新
-  bun.lock）与 `mono-release`（bump + 提交 + tag + push）
+- 版本号只允许三条路径改动：`mono-sync`（`--sync` 落后对齐基线 / `--reset` 失败发布后
+  领先复位基线，均自动 `bun install` 刷新 bun.lock）与 `mono-release`（bump + 提交 +
+  tag + push）
 - **禁止手写 `release:` 提交、禁止手工改 package.json 版本号**（绕过守卫 = 撞版本）
 - 脚本内置守卫：干净工作区、本地版本 == 该包 registry 基线、该包自上个逐包 tag 以来
   有实质变更（无基线时仅告警）、changelog 已存在且含实质条目——被拦时按提示处理，不要绕过

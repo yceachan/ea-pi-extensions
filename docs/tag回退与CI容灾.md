@@ -93,7 +93,7 @@ git push && git push --tags     # 手工补推
 npm view @yceachan/pi-gadget@0.3.0 version      # 期望报错（不存在）
 
 # 2. 本地版本复位到该包 registry 基线（最高已发布版本）
-bun run mono-sync -- --sync                     # 本地领先会拒绝降级 → 手动改回上一版本
+bun run mono-sync -- --reset                     # 把领先包写回 registry 基线（失败发布的官方复位入口）
 
 # 3. 删 tag（本地 + 远端）
 git tag -d pi-gadget@0.3.0 && git push origin :refs/tags/pi-gadget@0.3.0
@@ -103,8 +103,9 @@ git tag -d pi-gadget@0.3.0 && git push origin :refs/tags/pi-gadget@0.3.0
 bun run mono-release -- pi-gadget minor
 ```
 
-要点：删 tag 后该包无逐包 tag 基线，「自上个 tag 有变更」守卫降级为仅告警；版本前置守卫
-校验目标版本零发布通过。旧 Release 提交留在历史里成为未打 tag 的普通提交，不影响后续。
+要点：删 tag 后该包无逐包 tag 基线，「自上个 tag 有变更」守卫降级为仅告警；基线守卫
+（本地版本 == registry 基线）在 `--reset` 复位后通过。旧 Release 提交留在历史里成为
+未打 tag 的普通提交，不影响后续。
 
 ### 场景 C：CI 发布步失败 → 幂等 rerun
 
