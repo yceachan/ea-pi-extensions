@@ -12,7 +12,8 @@
 //   status "unreachable" — network error / timeout / non-404 HTTP failure
 
 import { execSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 const REGISTRY_TIMEOUT_MS = 10000;
 
@@ -40,6 +41,113 @@ export function readJson(path) {
 
 export function writeJson(path, value) {
 	writeFileSync(path, JSON.stringify(value, null, 2) + "\n");
+}
+
+// ── workspace 包发现 + 模糊匹配（gcm -p / --list 共用）───────────────────
+//
+// 包清单来自 packages/*（含 package.json 的目录，按名排序）。-p 的模糊匹配
+// 在包名之外还有二级匹配：packages/*/ 下的裸根 .ts 小工具（如 pi-gadget 下的
+// pi-cite-wslpath.ts）命中时归到其母包——单文件小工具没有独立版本，发布与
+// changelog 都挂在母包上。
+
+// packages/* 中带 package.json 的包名列表（排序，稳定输出）。
+export function packageScopes(root) {
+	const dir = join(root, "packages");
+	try {
+		return readdirSync(dir, { withFileTypes: true })
+			.filter(
+				(e) =>
+					e.isDirectory() &&
+					e.name !== "node_modules" &&
+					existsSync(join(dir, e.name, "package.json")),
+			)
+			.map((e) => e.name)
+			.sort();
+	} catch {
+		return [];
+	}
+}
+
+// [{ pkg, version, path }] —— --list 输出 packages@versions 的数据源。
+export function packageMembers(root) {
+	return packageScopes(root).map((pkg) => {
+		const path = join(root, "packages", pkg, "package.json");
+		try {
+			const version = JSON.parse(readFileSync(path, "utf8")).version;
+			return { pkg, version: version ?? "?", path };
+		} catch {
+			return { pkg, version: "?", path };
+		}
+	});
+}
+
+// "<pkg>@<version>" 行（--list 输出）。
+export function packageVersionLines(root) {
+	return packageMembers(root).map((m) => `${m.pkg}@${m.version}`);
+}
+
+// 二级匹配索引：裸根 .ts 小工具 basename（不带扩展名）→ { pkg, file }。
+// 只扫 packages/*/*.ts 一层（子目录里的模块不算“小工具”）。
+export function bareRootToolScopes(root) {
+	const map = new Map();
+	for (const pkg of packageScopes(root)) {
+		const dir = join(root, "packages", pkg);
+		let entries;
+		try {
+			entries = readdirSync(dir, { withFileTypes: true });
+		} catch {
+			continue;
+		}
+		for (const entry of entries) {
+			if (!entry.isFile() || !entry.name.endsWith(".ts")) continue;
+			const base = entry.name.slice(0, -3);
+			if (base.length > 0 && !map.has(base)) {
+				map.set(base, { pkg, file: entry.name });
+			}
+		}
+	}
+	return map;
+}
+
+// 模糊打分 0..1：精确 > 子串 > 前缀 > 子序列命中，否则 0（= 无候选）。
+export function fuzzyScore(query, candidate) {
+	const q = query.toLowerCase();
+	const c = candidate.toLowerCase();
+	if (c === q) return 1;
+	if (c.includes(q)) return 0.85;
+	if (c.startsWith(q)) return 0.75;
+	let i = 0;
+	for (const ch of q) {
+		const j = c.indexOf(ch, i);
+		if (j === -1) return 0;
+		i = j + 1;
+	}
+	return 0.5 + 0.1 * (q.length / c.length);
+}
+
+// 模糊候选排行：一级匹配包名（+ 调用方给的跨切面词表），二级匹配裸根 .ts
+// 小工具并归到母包。返回 [{ scope, score, via }]，via 为 null（直接命中包名）
+// 或 "tool:<文件名>"（二级命中）；同一 scope 只保留最高分命中，按分数降序。
+export function fuzzyScopeCandidates(input, { root, crossScopes = [] }) {
+	const scopes = packageScopes(root);
+	const tools = bareRootToolScopes(root);
+	const hits = [];
+	for (const s of [...scopes, ...crossScopes]) {
+		const score = fuzzyScore(input, s);
+		if (score >= 0.5) hits.push({ scope: s, score, via: null });
+	}
+	for (const [base, { pkg, file }] of tools) {
+		const score = Math.max(fuzzyScore(input, base), fuzzyScore(input, file));
+		if (score >= 0.5) hits.push({ scope: pkg, score, via: `tool:${file}` });
+	}
+	const best = new Map();
+	for (const h of hits) {
+		const prev = best.get(h.scope);
+		if (!prev || h.score > prev.score) best.set(h.scope, h);
+	}
+	return [...best.values()]
+		.sort((a, b) => b.score - a.score || a.scope.length - b.scope.length)
+		.slice(0, 8);
 }
 
 // Surgical sync of bun.lock's workspace version fields for the given
@@ -105,7 +213,8 @@ export async function registryBaseline(name) {
 // too, so callers can warn on unreachable but stay silent on a 404.
 export async function isPublished(name, version) {
 	const res = await fetchRegistry(name);
-	if (res.kind !== "ok") return { published: false, unreachable: res.kind === "unreachable" };
+	if (res.kind !== "ok")
+		return { published: false, unreachable: res.kind === "unreachable" };
 	return {
 		published: Object.keys(res.doc.versions ?? {}).includes(version),
 		unreachable: false,

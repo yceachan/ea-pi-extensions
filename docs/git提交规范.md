@@ -28,8 +28,8 @@ mindmap
       "三个守卫"
     "Changelog"
       "changelog/vX.Y.Z/log.md"
-      "手工提交"
-      "docs-changelog-"
+      "随 feat 一次提交"
+      "docs-changelog-次选"
     "分支与 PR"
       "直推 main"
       "外部走 PR"
@@ -84,12 +84,15 @@ bun run gcm -- -t fix -p shelld -m "drain zombie shells on session end"
 ```
 
 - `-t` 校验词表并归一别名（`chores` → `chore`）；`release` 一律拒绝（仅 mono-release 生成）
-- `-p` 支持包名**模糊搜索**，非精确命中必须二次确认（TTY 交互选择 / 非交互 `-y`）
+- `-p` 支持包名**模糊搜索**，非精确命中必须二次确认；二级匹配 packages/*/ 下裸根 .ts
+  小工具并归到母包（`-p cite-wslpath` → `pi-gadget`）。TTY 下回车确认首选、输入序号或
+  完整包名精确指定；非交互 `-y` 接受唯一候选
+- `--list` 列出全部 packages@versions（如 `pi-gadget@0.2.1`）
 - `-m` 校验 ≤50 字符、小写开头、无 emoji（违规直接拦截，中文/大写首字母告警）
 - `-c` changelog 骨架模式：`./gcm -c -p <pkg> --minor` 创建
   `changelog/<pkg>/vX.Y.Z/log.md` 骨架并打印提交提示（版本也可用
   `--patch/--major/--set-ver`，必须高于该包 registry 基线；只创建文件，
-  不碰 git、不发版）
+  不碰 git、不发版）。提示优先推荐与代码改动**一次提交**，`docs(changelog)` 为次选
 - 提交卫生由脚本强制：暂存区为空直接报错，且只提交暂存区（不替你 `git add`）
 - `--dry` 验证模式：走完整校验 + 可达性检查（在仓库内、暂存区非空），只回显构造出的完整命令不落库
 - `--print` 只输出拼好的提交信息不落库，供 agent/管道使用（与 `--dry` 同给时优先）
@@ -132,9 +135,12 @@ changelog/
 └── ...
 ```
 
-- **手工撰写、发版前提交**（Q：为何不是脚本生成？——发布说明需要人判断，脚本只负责版本仪式）
-- 骨架生成：`./gcm -c -p <pkg> --minor` 创建 `changelog/<pkg>/vX.Y.Z/log.md` 并打印提交提示
-- 提交格式：`docs(changelog): pi-gadget v0.3.0`，内容按 type 分组、引用提交 subject 提炼
+- **手工撰写、随代码一并提交**（Q：为何不是脚本生成？——发布说明需要人判断，脚本只负责版本仪式）
+- 推荐工作流（一次提交）: feat 开发完成后先 `./gcm -c -p <pkg> --minor` 创建骨架 → 填写
+  条目 → 代码与 `changelog/<pkg>/vX.Y.Z/log.md` 一并 `git add` →
+  `./gcm -t <type> -p <pkg> -m "..."` 一次提交
+- 次选（代码已提交，仅补发布说明）: `docs(changelog): pi-gadget v0.3.0`
+- 内容按 type 分组、引用提交 subject 提炼
 - `mono-release.mjs` 硬性要求 `changelog/<pkg>/v<ver>/log.md` 已存在且含实质
   `-` 条目（`gcm -c` 的空骨架不含条目，会被拦下）
 - 语言：中文（与 docs 一致；README/包描述保持英文面向 gallery）
@@ -174,5 +180,5 @@ changelog/
 | 格式 | `{feat,fix,docs}[(scope)]: subject` | 同源，八型词表 + 包名 scope |
 | scope | 包名（ai/tui/agent/...） | 五包名 + scripts/ci/docs/release/changelog/root |
 | release 提交 | maintainer 手动 `release: vX.Y.Z` | 脚本自动 `release: pi-gadget@0.3.0` |
-| changelog | maintainer 维护 CHANGELOG.md | 每版 `changelog/<pkg>/vX.Y.Z/log.md` 手工提交 |
+| changelog | maintainer 维护 CHANGELOG.md | 每版 `changelog/<pkg>/vX.Y.Z/log.md` 随代码一并提交（docs(changelog) 次选） |
 | 语言 | 英文 | 提交英文、文档中文 |
