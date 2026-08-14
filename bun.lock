@@ -21,7 +21,7 @@
     },
     "packages/pi-gadget": {
       "name": "@yceachan/pi-gadget",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "peerDependencies": {
         "@earendil-works/pi-coding-agent": "*",
         "typebox": "*",
