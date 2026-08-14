@@ -66,8 +66,9 @@ Run these as a grep-style pass. They take ten seconds.
 - **C4.** Every `rect rgb(R,G,B)`: R > 200 AND G > 200 AND B > 200.
 - **C5.** No `<br>` (HTML4); use `<br/>` (mermaid's accepted form).
 - **C6.** For flowcharts ≥ 12 nodes: frontmatter sets `layout: elk`.
+- **C7.** For `mindmap`: no ASCII `()` in any node text — `""` does not protect it; use fullwidth `（）`.
 
-If any of C1–C6 fail, fix mechanically — no judgment needed.
+If any of C1–C7 fail, fix mechanically — no judgment needed.
 
 ---
 
@@ -81,7 +82,7 @@ If any of C1–C6 fail, fix mechanically — no judgment needed.
 
 ## When the self-check finds something
 
-- **Cheap fixes (C1–C6, B3, D1)** — just fix and re-check.
+- **Cheap fixes (C1–C7, B3, D1)** — just fix and re-check.
 - **A2 fails (wrong type)** — start over from the type table in SKILL.md. Don't patch.
 - **B1 fails (no advanced syntax)** — open the matching `references/types/<type>.md` and add the missing primitive *only if it carries information*. Don't add `loop` or `alt` for show.
 - **A3 / B2 fails (mixed abstraction or god node)** — split into two diagrams. Two clean diagrams in adjacent fences beat one cluttered one.
@@ -96,5 +97,6 @@ The author has, on a per-diagram basis, repeatedly seen these failure modes:
 2. **Stick-figure sequence diagrams** — only `A->>B: x` arrows, no alt/loop/note, so the diagram conveys nothing the prose didn't already.
 3. **Render failures from missing `""` or stray `;`** — wasted iterations.
 4. **God nodes** — one box that says "kernel handles everything," which is uninformative.
+5. **mindmap nodes with ASCII `()`** — `"start()"` / `"v4.0.0 已发布(08-14)"` both die on the mindmap grammar even when quoted (11.15.0, 2026-08-14). Fullwidth `（）` is the stable form.
 
 Each phase of the checklist targets one of those failure modes directly. The cost of running it is < 30 seconds; the cost of shipping a broken diagram is much higher.

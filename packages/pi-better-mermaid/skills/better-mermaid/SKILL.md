@@ -54,7 +54,8 @@ The rightmost columns without a "Deep dive" entry are **rarely the right tool** 
 These are encoded in [`references/encoded-preferences.md`](references/encoded-preferences.md) with full reasoning. Summary:
 
 - **Engine: 11.15.0** (recently updated). Syntax gated as `v11.x+` is now safe to use — namespaces in classDiagram, central connections in sequenceDiagram, expanded flowchart shapes, sequenceNumber start/increment, etc. (`eventmodeling` is **deprecated** — it renders an error page on 11.15.0, see harness-eval record.)
-- **Wrap every text literal in `""`** — node labels, edge labels, sequence messages, notes, participant aliases. *Every one*, even pure ASCII. Reason: mixed-CJK / parens / slashes have repeatedly broken rendering; uniform quoting is the only stable posture.
+- **Wrap every text literal in `""`** — node labels, edge labels, sequence messages, notes, participant aliases. *Every one*, even pure ASCII. Reason: mixed-CJK / parens / slashes have repeatedly broken rendering; uniform quoting is the only stable posture — **with one known exception: mindmap nodes, where `""` does NOT protect ASCII `()` (see next bullet).**
+- **mindmap node text: no ASCII `()` — not even inside `""`.** The mindmap parser treats `()` as shape syntax even in quoted text and dies with `Expecting 'SPACELINE', 'NL', 'EOF', got 'NODE_ID'` (repro: `"v4.0.0 已发布(08-14)"`, mermaid 11.15.0, 2026-08-14). Use fullwidth `（）` instead — verified rendering.
 - **Never use `;`** — neither as a statement separator nor inside labels. Replace with newlines or `<br/>`. Reason: layouts have historically truncated on `;`.
 - **`sequenceDiagram` MUST start with `autonumber`** — numbered messages are how the surrounding prose references the diagram.
 - **`rect rgb(R,G,B)` background blocks** in sequence diagrams — **every channel > 200**. Black text on a dark background is unreadable.

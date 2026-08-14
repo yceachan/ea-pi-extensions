@@ -37,6 +37,7 @@ participant Rs as "tspi-greet-rs (Rust)"
 - Mermaid's parser uses heuristics to decide when a label "needs" quoting. Edge cases — `()` `:` `/` `,` mixed with CJK, line breaks inside labels — silently corrupt the parse on some layouts. The docs say quoting is *optional*; empirically it is the only stable posture.
 - "Quote only when special chars appear" forces you to re-scan a label every time it changes. Quote-everything makes the rule *mechanical* — no judgment calls, no regressions when someone adds a `(` later.
 - Past failures: function signatures `void foo()`, paths `/sys/class/gpio`, Chinese-English mixed labels — each broke at least once before the uniform rule was adopted.
+- **The one known exception: `mindmap`.** Quoting does NOT protect mindmap node text from ASCII `()` — the mindmap grammar parses `(...)` as shape syntax even inside `""`. Reproduced 2026-08-14 on 11.15.0: `"v4.0.0 已发布(08-14)"` → `Parse error ... Expecting 'SPACELINE', 'NL', 'EOF', got 'NODE_ID'`. See rule 8.
 
 ---
 
@@ -133,6 +134,23 @@ If you find yourself adding a *second* logical concern to a diagram (e.g., timin
 
 ---
 
+## 8. `mindmap` node text: no ASCII `()`, even quoted
+
+```
+// mindmap
+root(("根"))
+    "v4.0.0 已发布（08-14）"     // good — fullwidth parens render fine
+    "start()"                    // BAD — Parse error even inside ""
+```
+
+**Why**
+
+The mindmap grammar treats `(...)` as node-shape syntax, and — unlike flowchart/sequence labels — it does this *inside quoted text too*. `"start()"` fails with `Expecting 'SPACELINE', 'NL', 'EOF', got 'NODE_ID'`; the `""` rule from §1 does not save you here. Reproduced 2026-08-14 on mermaid 11.15.0.
+
+Workarounds, in preference order: fullwidth `（）` (visually identical, parses clean), then a space/dash, then rephrase the node so the parenthetical isn't needed.
+
+---
+
 ## Anti-patterns — auto-reject before emitting
 
 | Symptom                                                                       | Fix                                                                                  |
@@ -147,3 +165,4 @@ If you find yourself adding a *second* logical concern to a diagram (e.g., timin
 | `flowchart` modelling a state machine ("idle → running → done")               | `stateDiagram-v2`.                                                                   |
 | Single node holds > 4 distinct responsibilities                               | Split or move to `classDiagram`.                                                  |
 | Mixed-abstraction-level top-level boxes (one says "TCP", another says "ack")  | Pull lower-abstraction parts into a subgraph or a separate diagram.                  |
+| `mindmap` node text containing ASCII `()` (even inside `""`)                    | Fullwidth `（）`, or rephrase. Quotes do NOT protect — see rule 8.                     |
