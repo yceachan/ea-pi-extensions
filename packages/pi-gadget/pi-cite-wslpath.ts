@@ -73,6 +73,32 @@ function escapeMarkdownLabel(label: string): string {
 }
 
 /**
+ * Percent-encode a path for a file:// URI WITHOUT encoding non-ASCII
+ * characters. Windows' wsl.localhost bridge decodes %XX byte-wise (ANSI-style),
+ * so percent-encoded UTF-8 (e.g. %E5%A4%8D) arrives mojibake'd and the file is
+ * reported as not found, while raw UTF-8 passes through the bridge intact.
+ * Only ASCII characters that would break URI parsing (space, %, #, ?, ...)
+ * are escaped — those decode back byte-for-byte correctly (verified: %20 opens).
+ */
+export function escapeUriPath(path: string): string {
+	// RFC 3986 unreserved + sub-delims + ':' '@' '/' — everything allowed in a
+	// path (segments plus the '/' separator). '#' and '?' are excluded on
+	// purpose: they would be parsed as fragment/query and truncate the path.
+	const SAFE = /[A-Za-z0-9\-._~!$&'()*+,;=:@/]/;
+	let out = "";
+	for (const ch of path) {
+		const cp = ch.codePointAt(0);
+		if (cp === undefined) continue;
+		if (cp > 0x7f || SAFE.test(ch)) {
+			out += ch;
+		} else {
+			out += `%${ch.charCodeAt(0).toString(16).toUpperCase().padStart(2, "0")}`;
+		}
+	}
+	return out;
+}
+
+/**
  * Convert a native path to a Windows-Terminal-openable file URI.
  *
  * WSL rules:
@@ -96,7 +122,7 @@ export function toWindowsFileUri(
 	// Windows drive form — normalize to a URI, independent of WSL.
 	if (WIN_DRIVE_RE.test(trimmed)) {
 		const normalized = trimmed.replaceAll("\\", "/");
-		return `file:///${encodeURI(normalized)}`;
+		return `file:///${escapeUriPath(normalized)}`;
 	}
 
 	// UNC wsl bridge form — normalize to the wsl.localhost URI. The first
@@ -105,7 +131,7 @@ export function toWindowsFileUri(
 		const normalized = trimmed
 			.replace(/^(?:\\\\|\/\/)wsl(?:\.localhost|\$)?[\\/]/i, "/")
 			.replaceAll("\\", "/");
-		return `file://wsl.localhost/${encodeURI(normalized).replace(/^\/+/, "")}`;
+		return `file://wsl.localhost/${escapeUriPath(normalized).replace(/^\/+/, "")}`;
 	}
 
 	const cwd = options.cwd ?? process.cwd();
@@ -116,11 +142,11 @@ export function toWindowsFileUri(
 		if (mnt) {
 			const drive = mnt[1].toUpperCase();
 			const rest = mnt[2] ?? "";
-			return `file:///${drive}:/${encodeURI(rest)}`;
+			return `file:///${drive}:/${escapeUriPath(rest)}`;
 		}
 		const distro = options.distro ?? process.env.WSL_DISTRO_NAME ?? "";
 		if (distro) {
-			return `file://wsl.localhost/${distro}${encodeURI(abs)}`;
+			return `file://wsl.localhost/${distro}${escapeUriPath(abs)}`;
 		}
 		// WSL without a known distro name: the wsl.localhost URI would be
 		// malformed, so fall back to the standard file URI.
