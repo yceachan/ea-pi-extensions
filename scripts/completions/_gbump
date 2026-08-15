@@ -1,0 +1,73 @@
+#compdef gbump gcm
+#
+# gbump / gcm 的 zsh 参数补全。
+#
+# -p 的包名候选动态扫描 packages/*/package.json 目录名；gcm 分支另附跨切面
+# 词表 scripts/ci/docs/release/changelog/root（与 scripts/gcm.mjs 的
+# CROSS_SCOPES 保持一致，gbump 只认 packages/* 不追加）。仓库根由本文件
+# 在 fpath 中的位置推导（scripts/completions/_gbump 的上级 ×3），不依赖
+# 调用时 cwd，也不依赖 functions_source（zsh 5.8 的 autoload 路径下为空）。
+#
+# 安装: 把本目录加入 fpath（详见 docs/发行版本控制策略.md），例如:
+#   fpath+=("$HOME/work/pi-agent-harness/extensions/mono/scripts/completions")
+# 置于 oh-my-zsh 的 compinit（source $ZSH/oh-my-zsh.sh）之前。
+
+_gbump() {
+	local -a pkgs flags
+	local src root
+	src=(${^fpath}/_gbump(N[1]))
+	# src 在多处 fpath 含 _gbump 时是多元素数组；标量拼接会得到空格粘连的
+	# 垃圾 root（fpath 多元素时 "${src:h:h:h}" 是空格拼接），故显式取首元素。
+	root="${src[1]:h:h:h}"
+	pkgs=(${root}/packages/*(N/:t))
+	if (( ! $#pkgs )); then
+		pkgs=(${PWD}/packages/*(N/:t))
+	fi
+	# gcm -p 额外接受跨切面词表；但 -c changelog 骨架模式要求精确包名
+	# （gcm.mjs changelogMode 直接查 packageScopes），此时不附跨切面词。
+	if [[ $service == gcm ]] && (( ! ${words[(I)(-c|--changelog)]} )); then
+		pkgs+=(scripts ci docs release changelog root)
+	fi
+
+	local context state line ret=1
+	typeset -A opt_args
+
+	if [[ $service == gbump ]]; then
+		flags=(
+			'(--minor --major --set-ver)--patch[bump patch version]'
+			'(--patch --major --set-ver)--minor[bump minor version]'
+			'(--patch --minor --set-ver)--major[bump major version]'
+			'(--patch --minor --major)--set-ver[set explicit target version (X.Y.Z)]:version:_message'
+			'--dry-run[validate all guards and print the plan without writing]'
+			'(-y --yes)'{-y,--yes}'[accept the unique fuzzy -p match without confirmation (non-TTY)]'
+			# gbump 只认 -p，不接受 --scope。spec 必须恒常存在，
+			# _arguments 才能识别 -p 带参数并在其参数位分发 ->pkg。
+			'-p[package scope (fuzzy match supported)]:package scope:->pkg'
+		)
+	else
+		flags=(
+			'(-t --type)'{-t,--type}'[commit type]:type:(feat fix docs chore refactor test ci)'
+			'(-m --message)'{-m,--message}'[commit subject]:subject:_message'
+			'(-b --body)'{-b,--body}'[commit body]:body:_message'
+			'--print[print the composed message only, no git]'
+			'--dry[run full validation without committing]'
+			'(-c --changelog)'{-c,--changelog}'[create a changelog skeleton]'
+			'--list[list all packages@versions]'
+			'(--minor --major --set-ver)--patch[bump patch version]'
+			'(--patch --major --set-ver)--minor[bump minor version]'
+			'(--patch --minor --set-ver)--major[bump major version]'
+			'(--patch --minor --major)--set-ver[set explicit target version (X.Y.Z)]:version:_message'
+			'(-y --yes)'{-y,--yes}'[accept the unique fuzzy -p match without confirmation (non-TTY)]'
+			'(-p --scope)'{-p,--scope}'[package scope (fuzzy match supported)]:package scope:->pkg'
+		)
+	fi
+	flags+=('(-h --help)'{-h,--help}'[show help]')
+
+	_arguments -s -C : $flags && ret=0
+	if [[ $state == pkg && $#pkgs -gt 0 ]]; then
+		_values 'package scope' $pkgs && ret=0
+	fi
+	return ret
+}
+
+_gbump "$@"

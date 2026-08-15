@@ -19,14 +19,13 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createInterface } from "node:readline";
 import {
 	compareVersions,
-	fuzzyScopeCandidates,
 	isValidVersion,
 	packageScopes,
 	packageVersionLines,
 	registryBaseline,
+	resolvePackageScope,
 } from "./lib.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -332,77 +331,7 @@ async function changelogMode() {
 }
 
 // ---- scope 解析（包名模糊搜索 + 二级小工具匹配 + 二次确认）----
-
-function ask(question) {
-	const rl = createInterface({ input: process.stdin, output: process.stdout });
-	return new Promise((res) => {
-		rl.question(question, (answer) => {
-			rl.close();
-			res(answer.trim());
-		});
-	});
-}
-
-// 候选展示: 直接命中显示包名，二级小工具命中标注来源文件。
-function describeCandidate(c) {
-	return c.via ? `${c.scope}（via ${c.via.slice(5)}）` : c.scope;
-}
-
-async function resolveScope(input) {
-	const exactScopes = [...packageScopes(root), ...CROSS_SCOPES];
-	if (exactScopes.includes(input)) return input; // 精确命中: 包名或跨切面词表
-
-	const scored = fuzzyScopeCandidates(input, {
-		root,
-		crossScopes: CROSS_SCOPES,
-	});
-
-	if (scored.length === 0) {
-		fail(
-			`scope "${input}" 无候选匹配——包名: ${packageScopes(root).join(", ")}；跨切面: ${CROSS_SCOPES.join("/")}`,
-		);
-	}
-
-	const interactive = process.stdin.isTTY && process.stdout.isTTY;
-	if (!interactive) {
-		if (scored.length === 1) {
-			if (!opts.yes) {
-				fail(
-					`模糊匹配 "${input}" → ${describeCandidate(scored[0])}（二次确认: 追加 -y 接受）`,
-				);
-			}
-			warn(`模糊匹配 "${input}" → ${describeCandidate(scored[0])}（-y 已确认）`);
-			return scored[0].scope;
-		}
-		fail(
-			`模糊匹配 "${input}" 命中多个候选（${scored.map(describeCandidate).join(" / ")}）——请使用完整包名，或 TTY 下交互选择`,
-		);
-	}
-
-	if (scored.length === 1) {
-		const ans = await ask(
-			`模糊匹配 "${input}" → 候选 ${describeCandidate(scored[0])}。回车确认 [Y/n] `,
-		);
-		if (ans === "" || /^y(es)?$/i.test(ans)) return scored[0].scope;
-		fail("已取消");
-	}
-
-	console.warn(`⚠ 模糊匹配 "${input}" 命中多个候选（回车确认首选）:`);
-	for (const [i, c] of scored.entries()) {
-		console.log(`  ${i + 1}) ${describeCandidate(c)}`);
-	}
-	const ans = await ask(
-		"回车确认首选 / 输入序号 / 输入完整包名（其他输入取消）: ",
-	);
-	if (ans === "") return scored[0].scope; // enter = 确认首选
-	if (/^\d+$/.test(ans)) {
-		const pick = scored[Number(ans) - 1];
-		if (pick) return pick.scope;
-		fail(`无效序号: ${ans}`);
-	}
-	if (exactScopes.includes(ans)) return ans; // 输入完整包名精确指定
-	fail("已取消");
-}
+// 实现共享于 scripts/lib.mjs 的 resolvePackageScope（gbump -p 同用一份）。
 
 // ---- subject 校验 ----
 
@@ -441,7 +370,12 @@ function quoteShell(arg) {
 
 async function main() {
 	let scope;
-	if (opts.scope !== undefined) scope = await resolveScope(opts.scope);
+	if (opts.scope !== undefined)
+		scope = await resolvePackageScope(opts.scope, {
+			root,
+			crossScopes: CROSS_SCOPES,
+			yes: opts.yes,
+		});
 
 	validateSubject(opts.message);
 	const composed =

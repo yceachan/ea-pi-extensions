@@ -14,6 +14,7 @@
 import { execSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { createInterface } from "node:readline";
 
 const REGISTRY_TIMEOUT_MS = 10000;
 
@@ -148,6 +149,107 @@ export function fuzzyScopeCandidates(input, { root, crossScopes = [] }) {
 	return [...best.values()]
 		.sort((a, b) => b.score - a.score || a.scope.length - b.scope.length)
 		.slice(0, 8);
+}
+
+// 交互提问（TTY 二次确认用；非 TTY 调用方不会走到 ask）。
+export function ask(question) {
+	const rl = createInterface({ input: process.stdin, output: process.stdout });
+	return new Promise((res) => {
+		rl.question(question, (answer) => {
+			rl.close();
+			// Ctrl-D (EOF) 时 answer 为 null——原样上抛不 trim，调用方按
+			// 非确认处理（单/多候选都落到 fail("已取消")），避免 TypeError。
+			res(answer === null ? null : answer.trim());
+		});
+	});
+}
+
+// 候选展示: 直接命中显示包名，二级小工具命中标注来源文件。
+function describeScopeCandidate(c) {
+	return c.via ? `${c.scope}（via ${c.via.slice(5)}）` : c.scope;
+}
+
+function defaultFail(msg) {
+	console.error(`✗ ${msg}`);
+	process.exit(1);
+}
+
+function defaultWarn(msg) {
+	console.warn(`⚠ ${msg}`);
+}
+
+// 模糊 scope 解析（gcm -p / gbump -p 共用的一份实现）:
+//   精确命中包名或跨切面词表 → 直接返回；
+//   否则 fuzzyScopeCandidates 打分后二次确认:
+//     TTY: 唯一候选回车确认；多候选回车确认首选 / 输入序号 / 输入完整包名
+//     非 TTY: 唯一候选须 yes 接受；多候选必须改用完整包名
+//   fail/warn 可注入（调用方保持各自的错误提示风格），默认与 gcm 一致。
+//   调用方语义差异只由参数表达: gbump 传 crossScopes=[]（发版只认包），
+//   gcm 传 CROSS_SCOPES（提交 scope 含 scripts/ci/docs 等跨切面词）。
+export async function resolvePackageScope(
+	input,
+	{
+		root,
+		crossScopes = [],
+		yes = false,
+		fail = defaultFail,
+		warn = defaultWarn,
+	} = {},
+) {
+	const exactScopes = [...packageScopes(root), ...crossScopes];
+	if (exactScopes.includes(input)) return input; // 精确命中: 包名或跨切面词表
+
+	const scored = fuzzyScopeCandidates(input, { root, crossScopes });
+
+	if (scored.length === 0) {
+		const cross =
+			crossScopes.length > 0 ? `；跨切面: ${crossScopes.join("/")}` : "";
+		fail(
+			`scope "${input}" 无候选匹配——包名: ${packageScopes(root).join(", ")}${cross}`,
+		);
+	}
+
+	const interactive = process.stdin.isTTY && process.stdout.isTTY;
+	if (!interactive) {
+		if (scored.length === 1) {
+			if (!yes) {
+				fail(
+					`模糊匹配 "${input}" → ${describeScopeCandidate(scored[0])}（二次确认: 追加 -y 接受）`,
+				);
+			}
+			warn(
+				`模糊匹配 "${input}" → ${describeScopeCandidate(scored[0])}（-y 已确认）`,
+			);
+			return scored[0].scope;
+		}
+		fail(
+			`模糊匹配 "${input}" 命中多个候选（${scored.map(describeScopeCandidate).join(" / ")}）——请使用完整包名，或 TTY 下交互选择`,
+		);
+	}
+
+	if (scored.length === 1) {
+		const ans = await ask(
+			`模糊匹配 "${input}" → 候选 ${describeScopeCandidate(scored[0])}。回车确认 [Y/n] `,
+		);
+		if (ans === "" || /^y(es)?$/i.test(ans)) return scored[0].scope;
+		fail("已取消");
+	}
+
+	console.warn(`⚠ 模糊匹配 "${input}" 命中多个候选（回车确认首选）:`);
+	for (const [i, c] of scored.entries()) {
+		console.log(`  ${i + 1}) ${describeScopeCandidate(c)}`);
+	}
+	const ans = await ask(
+		"回车确认首选 / 输入序号 / 输入完整包名（其他输入取消）: ",
+	);
+	if (ans === "") return scored[0].scope; // enter = 确认首选
+	if (/^\d+$/.test(ans)) {
+		const pick = scored[Number(ans) - 1];
+		if (pick) return pick.scope;
+		fail(`无效序号: ${ans}`);
+	}
+	if (exactScopes.includes(ans)) return ans; // 输入完整包名精确指定
+	fail("已取消");
 }
 
 // Surgical sync of bun.lock's workspace version fields for the given
