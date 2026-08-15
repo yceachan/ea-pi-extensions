@@ -58,7 +58,7 @@
     },
     "packages/pi-vision-helper": {
       "name": "@yceachan/pi-vision-helper",
-      "version": "0.0.1",
+      "version": "0.1.0",
       "devDependencies": {
         "@earendil-works/pi-ai": "^0.84.2",
         "@earendil-works/pi-coding-agent": "^0.84.2",
