@@ -27,19 +27,6 @@
         "typebox": "*",
       },
     },
-    "packages/pi-oc-go-luna-vision": {
-      "name": "@yceachan/pi-oc-go-luna-vision",
-      "version": "0.1.1",
-      "devDependencies": {
-        "@earendil-works/pi-ai": "^0.84.2",
-        "@earendil-works/pi-coding-agent": "^0.84.2",
-        "@types/node": "^24",
-      },
-      "peerDependencies": {
-        "@earendil-works/pi-ai": "*",
-        "@earendil-works/pi-coding-agent": "*",
-      },
-    },
     "packages/pi-shelld": {
       "name": "@yceachan/pi-shelld",
       "version": "0.1.1",
@@ -373,8 +360,6 @@
     "@yceachan/pi-better-mermaid": ["@yceachan/pi-better-mermaid@workspace:packages/pi-better-mermaid"],
 
     "@yceachan/pi-gadget": ["@yceachan/pi-gadget@workspace:packages/pi-gadget"],
-
-    "@yceachan/pi-oc-go-luna-vision": ["@yceachan/pi-oc-go-luna-vision@workspace:packages/pi-oc-go-luna-vision"],
 
     "@yceachan/pi-shelld": ["@yceachan/pi-shelld@workspace:packages/pi-shelld"],
 

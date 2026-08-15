@@ -8,7 +8,6 @@ A [bun](https://bun.sh) workspace monorepo for [yceachan](https://github.com/yce
 | --- | --- | --- |
 | [`@yceachan/pi-shelld`](packages/pi-shelld) | `shell_daemon` tool + ⭕shell TUI monitor for long-running background processes | [pi.dev](https://pi.dev/packages) |
 | [`@yceachan/pi-vision-helper`](packages/pi-vision-helper) | config-driven vision delegation (pi-registry reuse or custom responses API) when the main model has no vision — pure TypeScript, single runtime | [pi.dev](https://pi.dev/packages) |
-| [`@yceachan/pi-oc-go-luna-vision`](packages/pi-oc-go-luna-vision) | visual understanding via gpt-5.6-luna when the main model has no vision | [pi.dev](https://pi.dev/packages) |
 | [`@yceachan/pi-gadget`](packages/pi-gadget) | single-file utilities: `/clear` session archiving, `/exit` | [pi.dev](https://pi.dev/packages) |
 | [`@yceachan/pi-switch-cwd`](packages/pi-switch-cwd) | `/cwd` — switch the session working directory | [pi.dev](https://pi.dev/packages) |
 | [`@yceachan/pi-better-mermaid`](packages/pi-better-mermaid) | `better-mermaid` — bundles the writing-mermaid rules as a skill, gates the agent-delivered diagram with mmdc validation, loops on structured errors (3 strikes) · [capability evals](packages/pi-better-mermaid/skills/better-mermaid/evals/README.md) | [pi.dev](https://pi.dev/packages) |
@@ -45,7 +44,6 @@ A [bun](https://bun.sh) workspace monorepo for [yceachan](https://github.com/yce
 ```bash
 pi install npm:@yceachan/pi-shelld
 pi install npm:@yceachan/pi-vision-helper
-pi install npm:@yceachan/pi-oc-go-luna-vision
 pi install npm:@yceachan/pi-gadget
 pi install npm:@yceachan/pi-switch-cwd
 pi install npm:@yceachan/pi-better-mermaid
