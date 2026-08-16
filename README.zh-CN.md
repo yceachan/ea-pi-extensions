@@ -12,7 +12,7 @@
 | --- | --- | --- |
 | [`@yceachan/pi-shelld`](packages/pi-shelld) | `shell_daemon` 工具 + ⭕shell TUI 监视器，管理长驻后台进程 | [pi.dev](https://pi.dev/packages) |
 | [`@yceachan/pi-vision-helper`](packages/pi-vision-helper) | 主模型无视觉能力时的配置驱动视觉委托（复用 pi-registry 或自定义 responses API）——纯 TypeScript、单一 runtime | [pi.dev](https://pi.dev/packages) |
-| [`@yceachan/pi-gadget`](packages/pi-gadget) | 单文件小工具：`/clear` 会话归档、`/exit` | [pi.dev](https://pi.dev/packages) |
+| [`@yceachan/pi-gadget`](packages/pi-gadget) | 单文件小工具：`/clear` 会话归档、`/exit`、`pi_cite_wslpath`（WSL 路径 → Windows Terminal 可点超链接，批量 `paths[]`，agent_end 交付泄漏强制检查） | [pi.dev](https://pi.dev/packages) |
 | [`@yceachan/pi-switch-cwd`](packages/pi-switch-cwd) | `/cwd`——切换会话工作目录 | [pi.dev](https://pi.dev/packages) |
 | [`@yceachan/pi-better-mermaid`](packages/pi-better-mermaid) | `better-mermaid`——把 writing-mermaid 规则打包为 skill，用 mmdc 校验门禁 agent 产出的图，结构化错误循环重试（3 次）· [能力评估](packages/pi-better-mermaid/skills/better-mermaid/evals/README.md) | [pi.dev](https://pi.dev/packages) |
 

@@ -12,7 +12,9 @@
  *
  * The `pi_cite_wslpath` tool lets the model convert any native path to
  * clickable hyperlink text directly, without hard-coding the conversion rules
- * in the system prompt.
+ * in the system prompt. Paths arrive as a `paths` array, so one tool call
+ * converts any number of paths — citing several files costs a single request
+ * instead of N.
  *
  * Returns three interchangeable forms:
  *   - osc8:      raw OSC 8 sequence — paste verbatim into raw output streams;
@@ -23,10 +25,23 @@
  *   - uri:       plain URI text — fallback (relies on the terminal's URL
  *                auto-detection, which only kicks in once output settles).
  *
+ * agent_end force-check: after every agent run, the delivered assistant text
+ * is scanned for `file://` URIs Windows Terminal would reject (empty-host
+ * `file:///` or `file://localhost` with a non-drive first segment — i.e.
+ * /home, /tmp, /mnt, ...). A missed cite call can no longer slip through
+ * silently: the user gets a warning notification with the converted links.
+ * Quoted examples are skipped (code spans/fences and `...` ellipsis forms),
+ * so citing the guideline text itself does not trip the check.
+ *
+ * The tool also verifies each path exists on disk before citing, so a
+ * misspelled filename is flagged at cite time instead of producing a link
+ * that cannot be opened.
+ *
  * In Windows Terminal the user opens hyperlinks with Ctrl+click.
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -187,6 +202,114 @@ export function citeWslpath(
 	};
 }
 
+/**
+ * `file://` URI forms Windows Terminal refuses to open: empty host
+ * (`file:///`) or `file://localhost` with a first path segment that is not a
+ * drive letter. `file:///C:/...` is the accepted Windows form; `file:///home/...`,
+ * `file:///tmp/...`, `file:///mnt/...` all point at Linux-side paths.
+ * `#`/`?` stop the match (fragment/query are excluded from the path, matching
+ * `escapeUriPath`, which escapes them).
+ */
+const WINDOWS_BROKEN_FILE_URI_RE =
+	/file:\/\/(?:localhost)?\/(?!\/?[A-Za-z]:)[^\s\x00-\x1f"'<>`),;:#?\u3000-\u303f\uff00-\uffef)\]}]+/g;
+
+/** How many converted links to include in the agent_end warning. */
+const MAX_WARN_LINKS = 3;
+
+/** Minimal structural view of a message, enough to scan assistant text. */
+interface MessageLike {
+	role?: string;
+	content?: string | readonly { type?: string; text?: string }[];
+}
+
+/**
+ * Find `file://` URIs in text that Windows Terminal would refuse to open.
+ * Deduplicated, first-seen order. Example quotes are skipped: URIs inside
+ * backtick code spans or fenced code blocks (they render as plain text, not
+ * links), and ones ending in an ellipsis (`...`/`…`) — guideline texts quote
+ * exactly these forms.
+ */
+export function findWindowsBrokenFileUris(text: string): string[] {
+	const found: string[] = [];
+	const seen = new Set<string>();
+	let lineStart = 0;
+	let inFence = false;
+	for (const match of text.matchAll(WINDOWS_BROKEN_FILE_URI_RE)) {
+		// Advance the line state up to the match's line (fence toggling).
+		while (true) {
+			const lineEnd = text.indexOf("\n", lineStart);
+			const end = lineEnd === -1 ? text.length : lineEnd;
+			if (match.index <= end) break;
+			if (isFenceLine(text.slice(lineStart, end))) inFence = !inFence;
+			lineStart = end + 1;
+		}
+		if (inFence) continue;
+		const before = text.slice(lineStart, match.index);
+		let backticks = 0;
+		for (const ch of before) {
+			if (ch === "`") backticks++;
+		}
+		if (backticks % 2 === 1) continue; // inside an inline code span
+		if (match[0].endsWith("...") || match[0].endsWith("…")) continue;
+		if (seen.has(match[0])) continue;
+		seen.add(match[0]);
+		found.push(match[0]);
+	}
+	return found;
+}
+
+/** Fence opener/closer line (``` or ~~~, optionally with a language tag). */
+function isFenceLine(line: string): boolean {
+	return /^(`{3,}|~{3,})/.test(line.trim());
+}
+
+/**
+ * Whether the input is a native POSIX-style path — the only form checkable
+ * from WSL. Already-URI, Windows-drive and UNC forms are passed through.
+ */
+function isNativePath(input: string): boolean {
+	return (
+		!/^file:\/\//i.test(input) &&
+		!WIN_DRIVE_RE.test(input) &&
+		!UNC_WSL_RE.test(input)
+	);
+}
+
+/** Recover the native path from a leaked `file://` URI (percent-decoding). */
+export function leakedFileUriToPath(uri: string): string | undefined {
+	const match = /^file:\/\/(?:localhost)?(\/.*)$/.exec(uri);
+	if (!match) return undefined;
+	try {
+		return decodeURIComponent(match[1]);
+	} catch {
+		return match[1];
+	}
+}
+
+/**
+ * Scan the assistant message texts of an agent run for leaked Linux
+ * `file://` URIs (deduplicated). This is the agent_end force-check.
+ */
+export function findDeliveredBrokenFileUris(
+	messages: readonly MessageLike[],
+): string[] {
+	const found: string[] = [];
+	const seen = new Set<string>();
+	for (const message of messages) {
+		if (message.role !== "assistant") continue;
+		if (typeof message.content === "string" || !message.content) continue;
+		for (const block of message.content) {
+			if (block.type !== "text" || !block.text) continue;
+			for (const uri of findWindowsBrokenFileUris(block.text)) {
+				if (seen.has(uri)) continue;
+				seen.add(uri);
+				found.push(uri);
+			}
+		}
+	}
+	return found;
+}
+
 export default function (pi: ExtensionAPI) {
 	pi.registerTool({
 		name: "pi_cite_wslpath",
@@ -201,16 +324,17 @@ export default function (pi: ExtensionAPI) {
 			"while pi is still streaming), 'markdown' ([label](uri) — preferred for normal chat " +
 			"replies, pi renders it as a clickable hyperlink), and 'uri' (plain URI fallback). " +
 			"The user opens the link in Windows Terminal with Ctrl+click. " +
-			"Call this whenever you cite or print a file path in your reply.",
+			"Call this whenever you cite or print file paths in your reply — " +
+			"batch them into a single `paths` array instead of one call per path.",
 		promptSnippet:
-			"pi_cite_wslpath: native path -> Windows-openable OSC 8 / markdown / URI hyperlink text (Ctrl+click opens it in Windows Terminal).",
+			"pi_cite_wslpath: native paths (batch `paths` array) -> Windows-openable OSC 8 / markdown / URI hyperlink text (Ctrl+click opens it in Windows Terminal).",
 		promptGuidelines: [
 			"When citing file paths in replies, call pi_cite_wslpath first and use its markdown form in chat text, or its osc8 form when writing a raw text stream.",
 			"Never emit raw file:///home/..., file:///tmp/... or file:///mnt/... links — Windows Terminal rejects them.",
+			"Batch multiple file paths into one pi_cite_wslpath call (paths array) instead of one call per path.",
 		],
 		parameters: Type.Object({
-			path: Type.String(),
-			label: Type.Optional(Type.String()),
+			paths: Type.Array(Type.String(), { minItems: 1, maxItems: 20 }),
 			form: Type.Optional(
 				Type.Union([
 					Type.Literal("osc8"),
@@ -220,21 +344,56 @@ export default function (pi: ExtensionAPI) {
 			),
 		}),
 		async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-			const {
-				uri,
-				osc8: osc8Text,
-				markdown,
-			} = citeWslpath(params.path, { label: params.label });
 			const form = params.form ?? "both";
-			const parts: string[] = [];
-			if (form === "osc8" || form === "both") parts.push(`osc8:\n${osc8Text}`);
-			if (form === "markdown" || form === "both")
-				parts.push(`markdown:\n${markdown}`);
-			parts.push(`uri:\n${uri}`);
+			const sections = params.paths.map((path, index) => {
+				const { uri, osc8: osc8Text, markdown, label } = citeWslpath(path);
+				const parts = [`${index + 1}. path: ${path}`, `   label: ${label}`];
+				if (isNativePath(path)) {
+					const abs = isAbsolute(path)
+						? resolve(path)
+						: resolve(process.cwd(), path);
+					if (!existsSync(abs)) {
+						parts.push(
+							"   ! not found on disk — double-check the path/filename before citing",
+						);
+					}
+				}
+				parts.push(`   uri:\n${uri}`);
+				if (form === "osc8" || form === "both") parts.push(`   osc8:\n${osc8Text}`);
+				if (form === "markdown" || form === "both")
+					parts.push(`   markdown:\n${markdown}`);
+				return parts.join("\n");
+			});
 			return {
-				content: [{ type: "text", text: parts.join("\n\n") }],
+				content: [{ type: "text", text: sections.join("\n\n---\n\n") }],
 				details: {},
 			};
 		},
+	});
+
+	// Force-check the delivered reply for links Windows Terminal cannot open.
+	// A missed pi_cite_wslpath call in the final delivery surfaces here as a
+	// warning notification with the converted links, instead of silently
+	// producing dead links in the transcript.
+	pi.on("agent_end", (event, ctx) => {
+		if (!isWslEnvironment()) return;
+		const leaked = findDeliveredBrokenFileUris(event.messages);
+		if (leaked.length === 0) return;
+
+		const lines = leaked.slice(0, MAX_WARN_LINKS).map((uri) => {
+			const path = leakedFileUriToPath(uri);
+			return `- ${path ? citeWslpath(path).markdown : uri}`;
+		});
+		const more =
+			leaked.length > MAX_WARN_LINKS
+				? `\n- ... and ${leaked.length - MAX_WARN_LINKS} more`
+				: "";
+		const message =
+			`[pi-cite-wslpath] Delivered text has ${leaked.length} file:// link(s) ` +
+			`Windows Terminal cannot open (Linux-side path). Converted:\n` +
+			`${lines.join("\n")}${more}` +
+			`\nAsk the agent to re-cite them via pi_cite_wslpath.`;
+		console.warn(message);
+		ctx.ui.notify(message, "warning");
 	});
 }
