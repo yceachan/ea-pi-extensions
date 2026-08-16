@@ -92,7 +92,7 @@ for (let i = 0; i < items.length; ) {
 }
 if (specs.length === 0) {
 	console.error(
-		"✗ expects at least one package, e.g. \"mono-release -- pi-gadget minor\"",
+		'✗ expects at least one package, e.g. "mono-release -- pi-gadget minor"',
 	);
 	process.exit(1);
 }
@@ -203,16 +203,14 @@ for (const plan of plans) {
 		console.error(
 			`✗ ${plan.pkg} 本地 ${plan.from} 领先 registry 基线 ${base.max} ——发版未完成?`,
 		);
-		console.error(
-			"  按 docs/tag回退与CI容灾.md 处理失败的发布，不要继续发版",
-		);
+		console.error("  按 docs/tag回退与CI容灾.md 处理失败的发布，不要继续发版");
 		failed = true;
 	}
 
 	// Guard 3: the package must have changed since its last package tag.
 	// No prior <pkg>@* tag = first per-package release → no baseline, warn only.
 	const lastTag = runCapture(
-		`git describe --match "${plan.pkg}@*" --abbrev=0 HEAD 2>/dev/null || true`,
+		`git describe --tags --match "${plan.pkg}@*" --abbrev=0 HEAD 2>/dev/null || true`,
 		root,
 	).trim();
 	if (lastTag) {
