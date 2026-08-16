@@ -15,7 +15,8 @@
 import { homedir } from "node:os";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { asRecord, asString, pickCI, type ModelCost } from "./registry";
+import { asRecord, asString, pickCI, type ModelCost } from "./registry.ts";
+import { EFFORTS, MAX_MAX_TOKENS, MIN_MAX_TOKENS } from "./vision.ts";
 
 export const CONFIG_ENV = "PI_VISION_HELPER_CONFIG";
 export const USER_CONFIG_PATH = join(
@@ -56,6 +57,7 @@ export interface ResolvedConfig {
 	raw: Record<string, unknown>;
 	enabled: boolean;
 	forceVisionBridge: boolean;
+	defaultEffort?: string;
 	maxTokens?: number;
 	timeoutMs?: number;
 	systemPrompt?: string;
@@ -87,24 +89,6 @@ export function findConfigPath(args: ConfigPathArgs = {}): string | undefined {
 	candidates.push(join(cwd, ".pi", "vision-helper.json"));
 	candidates.push(USER_CONFIG_PATH);
 	return candidates.find((c) => existsSync(c));
-}
-
-function expandApiKey(raw: unknown): string {
-	const s = asString(raw);
-	if (s === undefined) {
-		throw new Error("apiKey must be a string ($ENV_VAR or literal)");
-	}
-	const m = /^\$([A-Za-z_][A-Za-z0-9_]*)$/.exec(s.trim());
-	if (m) {
-		const v = process.env[m[1]];
-		if (v === undefined || v === "") {
-			throw new Error(
-				`apiKey references $${m[1]} which is not set in the environment`,
-			);
-		}
-		return v;
-	}
-	return s;
 }
 
 function parseCost(v: unknown, where: string): ModelCost | undefined {
@@ -154,6 +138,25 @@ function parseModelEntry(raw: unknown, index: number): VisionModelConfig {
 	};
 }
 
+function assertEffort(value: string | undefined, where: string): void {
+	if (value !== undefined && !EFFORTS.includes(value as (typeof EFFORTS)[number])) {
+		throw new Error(
+			`${where} must be one of ${EFFORTS.join("/")}, got '${value}'`,
+		);
+	}
+}
+
+function assertMaxTokens(value: number | undefined, where: string): void {
+	if (
+		value !== undefined &&
+		(value < MIN_MAX_TOKENS || value > MAX_MAX_TOKENS)
+	) {
+		throw new Error(
+			`${where} must be between ${MIN_MAX_TOKENS} and ${MAX_MAX_TOKENS}, got ${value}`,
+		);
+	}
+}
+
 function parseLegacy(raw: Record<string, unknown>): LegacyConfig | undefined {
 	const has =
 		raw.provider !== undefined ||
@@ -170,6 +173,11 @@ function parseLegacy(raw: Record<string, unknown>): LegacyConfig | undefined {
 	if (match !== "exact" && match !== "substring") {
 		throw new Error(`modelMatch must be 'exact' or 'substring', got '${match}'`);
 	}
+	const defaults = asRecord(raw.defaults);
+	const defaultsEffort = asString(defaults?.effort);
+	const defaultsMaxTokens = parseNumber(defaults?.maxTokens, "defaults.maxTokens");
+	assertEffort(defaultsEffort, "defaults.effort");
+	assertMaxTokens(defaultsMaxTokens, "defaults.maxTokens");
 	return {
 		provider: asString(raw.provider),
 		model: asString(raw.model),
@@ -181,9 +189,10 @@ function parseLegacy(raw: Record<string, unknown>): LegacyConfig | undefined {
 		headers: (asRecord(raw.headers) ?? undefined) as
 			| Record<string, string>
 			| undefined,
-		defaults: asRecord(raw.defaults) as
-			| { effort?: string; maxTokens?: number }
-			| undefined,
+		defaults:
+			defaultsEffort !== undefined || defaultsMaxTokens !== undefined
+				? { effort: defaultsEffort, maxTokens: defaultsMaxTokens }
+				: undefined,
 	};
 }
 
@@ -219,12 +228,18 @@ export function loadConfig(args: ConfigPathArgs = {}): ResolvedConfig {
 	const modelsRaw = Array.isArray(visionRaw?.models) ? visionRaw.models : [];
 	const models = modelsRaw.map((m, i) => parseModelEntry(m, i));
 
+	const defaultEffort = asString(raw.defaultEffort);
+	assertEffort(defaultEffort, "defaultEffort");
+	const maxTokens = parseNumber(raw.maxTokens, "maxTokens");
+	assertMaxTokens(maxTokens, "maxTokens");
+
 	return {
 		path,
 		raw,
 		enabled,
 		forceVisionBridge,
-		maxTokens: parseNumber(raw.maxTokens, "maxTokens"),
+		defaultEffort,
+		maxTokens,
 		timeoutMs: parseNumber(raw.timeoutMs, "timeoutMs"),
 		systemPrompt: asString(raw.systemPrompt),
 		vision: {

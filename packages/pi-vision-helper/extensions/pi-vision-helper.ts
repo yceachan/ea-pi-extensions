@@ -10,8 +10,9 @@
  *   --config is not exposed as a tool param; resolution is
  *   $PI_VISION_HELPER_CONFIG > $CWD/.pi/vision-helper.json >
  *   ~/.pi/agent/pi-vision-helper.json. See skills/pi-vision-helper/SKILL.md
- *   for the full schema (enabled / forceVisionBridge / maxTokens / timeoutMs /
- *   systemPrompt / vision.models[] with pi-registry + responses entries).
+ *   for the full schema (enabled / forceVisionBridge / defaultEffort /
+ *   maxTokens / timeoutMs / systemPrompt / vision.models[] with pi-registry
+ *   + responses entries).
  *
  * Trigger: the main model's input list has no "image" (e.g.
  * deepseek-v4-flash, glm-5.x, hy3, minimax-m2.7), but the user asks to
@@ -22,7 +23,7 @@
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { StringEnum, Type, type Usage } from "@earendil-works/pi-ai";
-import { loadConfig } from "../lib/config";
+import { loadConfig } from "../lib/config.ts";
 import {
 	DEFAULT_MAX_TOKENS,
 	DEFAULT_TIMEOUT_MS,
@@ -30,7 +31,7 @@ import {
 	resolveTarget,
 	runVision,
 	type VisionOutcome,
-} from "../lib/vision";
+} from "../lib/vision.ts";
 
 function buildUsage(outcome: VisionOutcome): Usage {
 	return {
@@ -65,7 +66,7 @@ export default function piVisionHelperExtension(pi: ExtensionAPI) {
 				Type.String({
 					description: "图片文件路径，支持 Windows（C:\\...）与 WSL（/mnt/...）路径",
 				}),
-				{ description: "一张或多张图片路径" },
+				{ description: "一张或多张图片路径", minItems: 1 },
 			),
 			prompt: Type.String({
 				description:
@@ -74,7 +75,7 @@ export default function piVisionHelperExtension(pi: ExtensionAPI) {
 			effort: Type.Optional(
 				StringEnum(EFFORTS, {
 					description:
-						"思考深度（默认 high）。medium 易产生臆测性幻觉；xhigh/max 会大量消耗输出预算，需同步提高 max_tokens",
+						"思考深度（默认取配置 defaultEffort，未配置时 high）。medium 易产生臆测性幻觉；xhigh/max 会大量消耗输出预算，需同步提高 max_tokens",
 				}),
 			),
 			max_tokens: Type.Optional(
@@ -116,6 +117,20 @@ export default function piVisionHelperExtension(pi: ExtensionAPI) {
 				};
 			}
 
+			// Gate: delegation is for models without vision. A vision-capable
+			// main model sees images itself — refuse unless forceVisionBridge.
+			// (ctx.model.input is the resolved model's capability list; absent =
+			// don't judge.)
+			const modelInput = ctx.model?.input;
+			if (!cfg.forceVisionBridge && modelInput?.includes("image")) {
+				throw new Error(
+					`pi-vision-helper refused: the active main model ${ctx.model?.id ?? "(unknown)"} ` +
+						"can see images itself (input includes \"image\") — delegation is only " +
+						"for models without vision. Set forceVisionBridge: true in the " +
+						"vision-helper config to force delegation.",
+				);
+			}
+
 			const target = resolveTarget(cfg);
 			const maxTokens =
 				(params.max_tokens as number | undefined) ??
@@ -123,6 +138,11 @@ export default function piVisionHelperExtension(pi: ExtensionAPI) {
 				cfg.legacy?.defaults?.maxTokens ??
 				DEFAULT_MAX_TOKENS;
 			const timeoutMs = cfg.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+			const effort =
+				(params.effort as string | undefined) ??
+				cfg.defaultEffort ??
+				cfg.legacy?.defaults?.effort ??
+				"high";
 
 			onUpdate?.({
 				content: [
@@ -136,15 +156,22 @@ export default function piVisionHelperExtension(pi: ExtensionAPI) {
 
 			let outcome: VisionOutcome;
 			try {
-				outcome = await runVision(target, {
-					images,
-					prompt: params.prompt as string,
-					effort: params.effort as string | undefined,
-					maxTokens,
-					timeoutMs,
-					systemPrompt: cfg.systemPrompt ?? "",
-				});
+				outcome = await runVision(
+					target,
+					{
+						images,
+						prompt: params.prompt as string,
+						effort,
+						maxTokens,
+						timeoutMs,
+						systemPrompt: cfg.systemPrompt ?? "",
+					},
+					signal,
+				);
 			} catch (e) {
+				if (signal?.aborted) {
+					return { content: [{ type: "text", text: "Cancelled" }], details: {} };
+				}
 				throw new Error(
 					`pi-vision-helper failed: ${e instanceof Error ? e.message : e}`,
 				);
@@ -158,7 +185,7 @@ export default function piVisionHelperExtension(pi: ExtensionAPI) {
 					entry: target.name,
 					type: target.type,
 					config: cfg.path,
-					effort: params.effort ?? "high",
+					effort,
 					imageCount: images.length,
 					keyFrom: target.keyFrom,
 				},

@@ -56,14 +56,17 @@ Prefer the `pi-vision-helper` tool (schema requires `images` and `prompt`):
 pi-vision-helper images=[path1, path2] prompt="Describe this image in detail" effort=high max_tokens=4096
 ```
 
-- `images`: image paths; Windows (`C:\...`) and WSL (`/mnt/...`) paths supported; multiple images
+- `images`: image paths; Windows (`C:\...`) and WSL (`/mnt/...`) paths supported;
+  at least one image (the tool schema rejects an empty array — a pure-text request
+  would still be billed)
 - `prompt`: **required**; must be explicitly constructed from the user's intent
   (describe / transcribe / compare, etc.), never omitted
-- `effort`: thinking depth (default `high`; `medium` is prone to speculative hallucinations;
-  `xhigh`/`max` need `max_tokens` raised to 8000+; `off`/`minimal` omit the reasoning field —
-  the zen gateway rejects them verbatim with HTTP 400)
+- `effort`: thinking depth (default from config `defaultEffort`, else legacy
+  `defaults.effort`, else `high`; `medium` is prone to speculative hallucinations;
+  `xhigh`/`max` need `max_tokens` raised to 8000+; `off`/`minimal` omit the
+  reasoning field — the zen gateway rejects them verbatim with HTTP 400)
 - `max_tokens`: output budget including reasoning tokens (default from config `maxTokens`,
-  else 4096, range 256–32768)
+  else 4096; enforced range 256–32768 — config and CLI values are validated)
 
 Manual CLI (same core, for debugging):
 
@@ -94,6 +97,8 @@ No config file at all = default behavior: search the pi-registry and use the fir
   "enabled": true,                  // master switch; false = the tool/CLI refuses to run
   "forceVisionBridge": false,       // true = delegation allowed even when the main model
                                     //   is itself a VLM (default: only for blind models)
+  "defaultEffort": "high",          // default reasoning effort; the tool/CLI effort
+                                    //   parameter overrides it (see the effort field table)
   "maxTokens": 4096,                // default max output tokens incl. reasoning;
                                     //   the tool/CLI parameter overrides it
   "timeoutMs": 60000,               // default timeout per vision call (ms);
@@ -145,8 +150,9 @@ No config file at all = default behavior: search the pi-registry and use the fir
 | Field | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `enabled` | bool | `true` | Master switch. `false` = the tool returns a "disabled" text and the CLI exits with an error. |
-| `forceVisionBridge` | bool | `false` | Lift the trigger restriction: allow delegation even when the main model is itself a VLM. |
-| `maxTokens` | number | 4096 | Default `max_output_tokens` (incl. reasoning) when the tool/CLI passes none. |
+| `forceVisionBridge` | bool | `false` | Tool-only gate: allow delegation even when the main model is itself a VLM. Without it the tool refuses to run when the active main model's `input` includes `"image"` (the CLI always delegates — it has no main model). |
+| `defaultEffort` | string | `high` | Default reasoning effort for the tool/CLI when none is passed. Must be one of `off`/`low`/`medium`/`high`/`xhigh`/`max` (invalid values = config error). |
+| `maxTokens` | number | 4096 | Default `max_output_tokens` (incl. reasoning) when the tool/CLI passes none. Enforced range 256–32768 (out-of-range = config error). |
 | `timeoutMs` | number | 60000 | Default per-call HTTP timeout in milliseconds (the pi tool uses 300000 when unset). |
 | `systemPrompt` | string | `""` | Replaces the built-in vision-assistant instructions; `""` keeps the default. |
 | `vision` | object | — | Model selection block (below). Absent = legacy flat fields / default luna search. |
@@ -155,7 +161,7 @@ No config file at all = default behavior: search the pi-registry and use the fir
 
 | Field | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `active` | string | first entry | Name of the active model entry. Unknown name falls back to the first entry. |
+| `active` | string | first entry | Name of the active model entry. Unknown name = error listing the available names (no silent fallback). |
 | `models` | array | `[]` | Model entries in priority order. Empty = legacy flat fields / default luna search. |
 
 #### Model entry
@@ -171,8 +177,8 @@ Fields depend on `type`:
 | `baseUrl` | — | ✓ | Endpoint root; `/responses` is appended. |
 | `apiKey` | — | ✓ | `$ENV_VAR` reference (expanded at call time; unset env = error) or a literal key. |
 | `model` | — | ✓ | Literal model id — no registry lookup. |
-| `cost` | ✓ | ✓ | USD per M tokens `{input, output, cacheRead, cacheWrite}`; overrides the store entry cost / defaults to 0. |
-| `headers` | ✓ | ✓ | Extra HTTP headers merged into the request. |
+| `cost` | ✓ | ✓ | USD per M tokens `{input, output, cacheRead, cacheWrite}`. `pi-registry`: overrides the store entry cost (default = store cost). `responses`: default = 0 (uncounted). |
+| `headers` | ✓ | ✓ | Extra HTTP headers merged into the request (default `{}`). |
 
 #### Fuzzy matching
 
@@ -201,15 +207,18 @@ Without a `vision` block, the old single-model fields keep working:
 ### Resolution precedence
 
 Tool/CLI parameters > config file > pi-registry (models-store.json + auth.json) > built-in
-defaults (luna / `high` / 4096). For keys specifically: entry `apiKey` > entry env var >
+defaults (luna / `high` / 4096). Effort specifically: tool/CLI `effort` > `defaultEffort` >
+legacy `defaults.effort` > `high`. For keys: entry `apiKey` > entry env var >
 `auth.json[provider].key`.
 
 ## How it works
 
 - **Request**: OpenAI Responses API — `POST {baseUrl}/responses` with `input_text` (your
-  prompt) and one `input_image` per image (`data:<mime>;base64,...`). The base64 bytes exist
-  only in memory and in that HTTPS request — they never enter the main model's context or the
-  session history. A model entry's `api` field in models-store.json is advisory only: the zen
+  prompt) and one `input_image` per image (`data:<mime>;base64,...`). The MIME type is
+  derived from the file extension (png/jpg/jpeg/jfif/gif/webp/bmp/heic/avif); unknown
+  extensions fail loudly instead of being mislabeled. The base64 bytes exist only in memory
+  and in that HTTPS request — they never enter the main model's context or the session
+  history. A model entry's `api` field in models-store.json is advisory only: the zen
   gateway serves `/responses` for models declared as openai-completions too (verified with
   kimi-k2.7-code).
 - **Effort**: `off`/`minimal` omit the `reasoning` field entirely (the zen gateway maps them to

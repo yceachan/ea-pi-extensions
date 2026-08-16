@@ -11,14 +11,17 @@ import {
 	loadModelsStore,
 	type ModelCost,
 	type ModelEntry,
-} from "./registry";
-import type { LegacyConfig, ResolvedConfig, VisionModelConfig } from "./config";
+} from "./registry.ts";
+import type { LegacyConfig, ResolvedConfig, VisionModelConfig } from "./config.ts";
 
 export const DEFAULT_BASE_URL = "https://opencode.ai/zen/go/v1";
 export const DEFAULT_MAX_TOKENS = 4096;
+export const MIN_MAX_TOKENS = 256;
+export const MAX_MAX_TOKENS = 32768;
 export const DEFAULT_TIMEOUT_MS = 300_000;
 export const EFFORTS = [
 	"off",
+	"minimal",
 	"low",
 	"medium",
 	"high",
@@ -81,15 +84,25 @@ const EXT_MIME: Record<string, string> = {
 	".png": "image/png",
 	".jpg": "image/jpeg",
 	".jpeg": "image/jpeg",
+	".jfif": "image/jpeg",
 	".gif": "image/gif",
 	".webp": "image/webp",
 	".bmp": "image/bmp",
+	".heic": "image/heic",
+	".avif": "image/avif",
 };
 
 function mimeOf(fp: string): string {
 	const dot = fp.lastIndexOf(".");
 	const ext = dot >= 0 ? fp.slice(dot).toLowerCase() : "";
-	return EXT_MIME[ext] ?? "image/jpeg";
+	const mime = EXT_MIME[ext];
+	if (!mime) {
+		throw new Error(
+			`cannot determine MIME type for ${fp} (extension '${ext || "(none)"}') — ` +
+				`supported: ${Object.keys(EXT_MIME).join(", ")}`,
+		);
+	}
+	return mime;
 }
 
 // ---------------------------------------------------------------------------
@@ -183,8 +196,8 @@ function resolveRegistryEntry(
 		).replace(/\/+$/, ""),
 		apiKey,
 		keyFrom,
-		cost: normalizeCost(modelEntry.cost),
-		headers: {},
+		cost: normalizeCost(cfgModel.cost ?? modelEntry.cost),
+		headers: cfgModel.headers ?? {},
 	};
 }
 
@@ -280,7 +293,7 @@ function resolveLegacy(
 		keyFrom = `env:${legacy.apiKeyEnv}`;
 	} else {
 		apiKey = (auth[provider] as { key?: string } | undefined)?.key;
-		keyFrom = `auth.json[provider]`;
+		keyFrom = `auth.json[${provider}]`;
 	}
 	if (!modelId && !legacy.apiKey && !legacy.apiKeyEnv) {
 		const vision = Object.entries(store)
@@ -358,9 +371,17 @@ export function resolveTarget(cfg: ResolvedConfig): VisionTarget {
 	const auth = loadAuth();
 
 	if (cfg.vision.models.length > 0) {
-		const active =
-			cfg.vision.models.find((m) => m.name === cfg.vision.active) ??
-			cfg.vision.models[0];
+		let active = cfg.vision.models[0];
+		if (cfg.vision.active) {
+			const found = cfg.vision.models.find((m) => m.name === cfg.vision.active);
+			if (!found) {
+				throw new Error(
+					`vision.active '${cfg.vision.active}' not found in vision.models — ` +
+						`available names: ${cfg.vision.models.map((m) => m.name).join(", ")}`,
+				);
+			}
+			active = found;
+		}
 		return active.type === "pi-registry"
 			? resolveRegistryEntry(active, store, auth)
 			: resolveResponsesEntry(active);
@@ -400,9 +421,20 @@ function collectText(items: unknown[]): string[] {
 	return texts;
 }
 
+export function computeCost(
+	usage: { input: number; output: number },
+	rates: { input: number; output: number },
+): { input: number; output: number } {
+	return {
+		input: (usage.input / 1e6) * rates.input,
+		output: (usage.output / 1e6) * rates.output,
+	};
+}
+
 export async function runVision(
 	target: VisionTarget,
 	options: VisionOptions,
+	signal?: AbortSignal,
 ): Promise<VisionOutcome> {
 	const content: Array<Record<string, string>> = [
 		{ type: "input_text", text: options.prompt },
@@ -455,9 +487,21 @@ export async function runVision(
 				...target.headers,
 			},
 			body: JSON.stringify(payload),
-			signal: AbortSignal.timeout(options.timeoutMs),
+			// Esc (ctx.signal) cancels in-flight work; the timeout still applies
+			// when no external signal is given (CLI).
+			signal: signal
+				? AbortSignal.any([signal, AbortSignal.timeout(options.timeoutMs)])
+				: AbortSignal.timeout(options.timeoutMs),
 		});
 	} catch (e) {
+		if (signal?.aborted) {
+			throw new Error("cancelled");
+		}
+		if (e instanceof DOMException && e.name === "TimeoutError") {
+			throw new Error(
+				`request to ${url} timed out after ${options.timeoutMs}ms`,
+			);
+		}
 		throw new Error(
 			`request to ${url} failed: ${e instanceof Error ? e.message : e}`,
 		);
@@ -485,9 +529,9 @@ export async function runVision(
 		model: data.model ?? target.modelId,
 		status: data.status ?? "completed",
 		usage: { input: usageIn, output: usageOut, reasoning },
-		cost: {
-			input: (usageIn / 1e6) * target.cost.input,
-			output: (usageOut / 1e6) * target.cost.output,
-		},
+		cost: computeCost(
+			{ input: usageIn, output: usageOut },
+			target.cost,
+		),
 	};
 }

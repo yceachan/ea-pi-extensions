@@ -9,6 +9,7 @@
     "skipLibCheck": true,
     "types": ["node"],
     "esModuleInterop": true,
+    "allowImportingTsExtensions": true,
     "forceConsistentCasingInFileNames": true
   },
   "include": ["extensions/**/*.ts", "lib/**/*.ts", "skills/**/*.ts"]

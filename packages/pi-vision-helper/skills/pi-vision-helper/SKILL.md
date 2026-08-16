@@ -59,11 +59,12 @@ bun vision.ts img.png --prompt "描述这张图" --json
 {
   "enabled": true,                  // 总开关；false = 工具拒绝运行
   "forceVisionBridge": false,       // true = 主模型即使是 VLM 也允许委托
+  "defaultEffort": "high",          // 默认思考深度（工具/CLI 的 effort 参数可覆写）
   "maxTokens": 4096,                // 默认最大输出 token，工具/CLI 参数可覆写
   "timeoutMs": 60000,               // 默认单次视觉调用超时（毫秒）
   "systemPrompt": "",               // 自定义系统提示词（空 = 使用内置默认）
   "vision": {
-    "active": "luna",               // 激活的模型名；缺省 = 列表第一个
+    "active": "luna",               // 激活的模型名；未知名 = 报错并列可用名
     "models": [                     // 多模型列表；空列表 = 回退旧版字段/默认 luna 搜索
       {
         "name": "luna",             // 唯一名称（--model / active 用）
@@ -84,7 +85,7 @@ bun vision.ts img.png --prompt "描述这张图" --json
 }
 ```
 
-模糊匹配规则（确定性）：精确（忽略大小写）> 候选包含查询串 > 查询串包含候选 > 首个候选。
+模糊匹配规则（确定性）：精确（忽略大小写）> 候选包含查询串 > 查询串包含候选 > **无匹配 = 报错**（绝不静默选首个候选——那会把未知 provider 路由到错误后端并真实扣费）。
 
 ### 旧版单模型字段（仍兼容）
 
@@ -92,7 +93,7 @@ bun vision.ts img.png --prompt "描述这张图" --json
 
 ## 思考深度（reasoning effort）
 
-API 不传 `reasoning.effort` 时默认为 `medium`，模型跳过深度推理，直接作答——实测会产生臆测性幻觉。默认 `high`：
+API 不传 `reasoning.effort` 时默认为 `medium`，模型跳过深度推理，直接作答——实测会产生臆测性幻觉。默认 `high`（配置 `defaultEffort` 或工具/CLI 的 `effort` 参数可改）：
 
 | effort | reasoning tokens | 结果 | 说明 |
 | --- | --- | --- | --- |
@@ -121,6 +122,11 @@ API 不传 `reasoning.effort` 时默认为 `medium`，模型跳过深度推理�
 
 | 症状 | 原因 / 处理 |
 | --- | --- |
+| `pi-vision-helper refused: the active main model ... can see images itself` | 主模型是 VLM，工具门控拒绝委托；确认需要后配置 `forceVisionBridge: true` |
+| `vision.active 'x' not found in vision.models` | `vision.active` 名字拼错；报错里会列出可用名 |
+| `defaultEffort must be one of ...` / `maxTokens must be between 256 and 32768` | 配置值非法；按报错范围修正 |
+| `cannot determine MIME type for ...` | 图片扩展名不在支持列表（png/jpg/jpeg/jfif/gif/webp/bmp/heic/avif）；改扩展名或重命名 |
+| `request to ... timed out after ...ms` | 超时（默认 60000，工具内默认 300000）；调大 `timeoutMs` |
 | `no vision-capable luna model found` | pi-registry 里没有 luna；配置 vision.models，或加一个 pi-registry 条目 |
 | `no model matched in provider` | Provider/Model 模糊匹配落空；用完整名，或检查 models-store.json |
 | `apiKey references $X which is not set` | 环境变量未设置；`export X=...` 后再跑 |
@@ -128,5 +134,5 @@ API 不传 `reasoning.effort` 时默认为 `medium`，模型跳过深度推理�
 | `responses model requires 'baseUrl'/'model'/'apiKey'` | responses 条目缺必填字段 |
 | `HTTP 400` | effort=off/minimal 直传会触发（已自动省略 reasoning 字段）；其余 400 多为上游限制 |
 | `HTTP 400/500` | 网关/上游对图片输入有限制（历史 issue），换模型或换 baseUrl 验证 |
-| 超时 | 调大 `timeoutMs`（默认 60000，工具内默认 300000） |
+| 超时 | 调大 `timeoutMs`（默认 60000，工具内默认 300000）；Esc 可取消在途请求 |
 | `enabled=false` | 配置总开关关闭；删除或改 true |

@@ -63,6 +63,7 @@
         "@earendil-works/pi-ai": "^0.84.2",
         "@earendil-works/pi-coding-agent": "^0.84.2",
         "@types/node": "^24",
+        "typescript": "^5.9.0",
       },
       "peerDependencies": {
         "@earendil-works/pi-ai": "*",

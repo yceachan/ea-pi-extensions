@@ -49,10 +49,14 @@ pi install npm:@yceachan/pi-vision-helper
 pi-vision-helper images=[路径1, 路径2] prompt="详细描述这张图" effort=high max_tokens=4096
 ```
 
-- `images`：图片路径，支持 Windows（`C:\...`）与 WSL（`/mnt/...`）路径、多图
+- `images`：图片路径，支持 Windows（`C:\...`）与 WSL（`/mnt/...`）路径；至少一张
+  （工具 schema 拒绝空数组——纯文本请求也会真实扣费）
 - `prompt`：**必填**，必须按用户具体意图显式构造（描述/转录/对比等），禁止省略
-- `effort`：思考深度（默认 `high`；`medium` 易幻觉；`xhigh`/`max` 需把 `max_tokens` 提到 8000+；`off`/`minimal` 省略 reasoning 字段——zen 网关直传会 HTTP 400）
-- `max_tokens`：输出预算含 reasoning（默认取配置 `maxTokens`，未配置 4096，范围 256–32768）
+- `effort`：思考深度（默认取配置 `defaultEffort`，未配置时 `high`；`medium` 易幻觉；
+  `xhigh`/`max` 需把 `max_tokens` 提到 8000+；`off`/`minimal` 省略 reasoning 字段——
+  zen 网关直传会 HTTP 400）
+- `max_tokens`：输出预算含 reasoning（默认取配置 `maxTokens`，未配置 4096；强制范围
+  256–32768——配置与 CLI 值都会校验）
 
 手动 CLI（同一核心，排查用）：
 
@@ -82,6 +86,7 @@ bun packages/pi-vision-helper/skills/pi-vision-helper/scripts/vision.ts img.png 
   "enabled": true,                  // 总开关；false = 工具/CLI 拒绝运行
   "forceVisionBridge": false,       // true = 主模型即使是 VLM 也允许委托
                                     //   （默认仅限无视觉主模型）
+  "defaultEffort": "high",          // 默认思考深度；工具/CLI 的 effort 参数可覆写
   "maxTokens": 4096,                // 默认最大输出 token（含 reasoning）；
                                     //   工具/CLI 参数可覆写
   "timeoutMs": 60000,               // 默认单次视觉调用超时（毫秒）；
@@ -132,8 +137,9 @@ bun packages/pi-vision-helper/skills/pi-vision-helper/scripts/vision.ts img.png 
 | 字段 | 类型 | 默认 | 含义 |
 | --- | --- | --- | --- |
 | `enabled` | bool | `true` | 总开关。`false` = 工具返回"已禁用"文本、CLI 报错退出 |
-| `forceVisionBridge` | bool | `false` | 解除触发限制：主模型是 VLM 也允许委托 |
-| `maxTokens` | number | 4096 | 工具/CLI 未传时的默认 `max_output_tokens`（含 reasoning） |
+| `forceVisionBridge` | bool | `false` | 仅工具生效的门控：主模型是 VLM 也允许委托。不设时，当前主模型 `input` 含 `"image"` 则工具拒绝运行（CLI 无主模型概念，始终可委托） |
+| `defaultEffort` | string | `high` | 工具/CLI 未传 effort 时的默认思考深度。必须是 `off`/`low`/`medium`/`high`/`xhigh`/`max` 之一（非法值 = 配置报错） |
+| `maxTokens` | number | 4096 | 工具/CLI 未传时的默认 `max_output_tokens`（含 reasoning）。强制范围 256–32768（越界 = 配置报错） |
 | `timeoutMs` | number | 60000 | 默认单次调用 HTTP 超时（毫秒；pi 工具未配置时用 300000） |
 | `systemPrompt` | string | `""` | 替换内置视觉助手指令；`""` 保持默认 |
 | `vision` | object | — | 模型选择块（见下）；缺省 = 旧版扁平字段 / 默认 luna 搜索 |
@@ -142,7 +148,7 @@ bun packages/pi-vision-helper/skills/pi-vision-helper/scripts/vision.ts img.png 
 
 | 字段 | 类型 | 默认 | 含义 |
 | --- | --- | --- | --- |
-| `active` | string | 首条 | 激活模型条目名；未知名回退首条 |
+| `active` | string | 首条 | 激活模型条目名；未知名 = 报错并列可用名（绝不静默回退） |
 | `models` | array | `[]` | 模型条目（按优先级排列）；空 = 旧版扁平字段 / 默认 luna 搜索 |
 
 #### 模型条目
@@ -158,8 +164,8 @@ bun packages/pi-vision-helper/skills/pi-vision-helper/scripts/vision.ts img.png 
 | `baseUrl` | — | ✓ | 端点根，自动拼 `/responses` |
 | `apiKey` | — | ✓ | `$ENV_VAR` 引用（调用时展开，环境未设置 = 报错）或字面量 key |
 | `model` | — | ✓ | 字面模型 id，不做 registry 查找 |
-| `cost` | ✓ | ✓ | 美元/每 M token `{input, output, cacheRead, cacheWrite}`；覆盖 store 成本 / 缺省 0 |
-| `headers` | ✓ | ✓ | 并入请求的附加 HTTP 头 |
+| `cost` | ✓ | ✓ | 美元/每 M token `{input, output, cacheRead, cacheWrite}`。`pi-registry`：覆盖 store 条目成本（缺省 = store 成本）；`responses`：缺省 = 0（不计成本） |
+| `headers` | ✓ | ✓ | 并入请求的附加 HTTP 头（缺省 `{}`） |
 
 #### 模糊匹配
 
@@ -187,15 +193,18 @@ bun packages/pi-vision-helper/skills/pi-vision-helper/scripts/vision.ts img.png 
 ### 生效优先级
 
 工具/CLI 参数 > 配置文件 > pi-registry（models-store.json + auth.json）> 内置默认
-（luna / `high` / 4096）。key 专用优先级：条目 `apiKey` > 条目环境变量 > `auth.json[provider].key`。
+（luna / `high` / 4096）。effort 具体链：工具/CLI `effort` > `defaultEffort` >
+旧版 `defaults.effort` > `high`。key 专用优先级：条目 `apiKey` > 条目环境变量 >
+`auth.json[provider].key`。
 
 ## 工作原理
 
 - **请求**：OpenAI Responses API——`POST {baseUrl}/responses`，`input_text`（提示词）+
-  每图一个 `input_image`（`data:<mime>;base64,...`）。base64 字节只存在于内存与那次 HTTPS
-  请求中——不进主模型上下文、不落 session 历史。models-store.json 里模型条目的 `api` 字段
-  仅作参考：zen 网关对声明为 openai-completions 的模型同样服务 `/responses`（kimi-k2.7-code
-  实测可用）。
+  每图一个 `input_image`（`data:<mime>;base64,...`）。MIME 由扩展名推导
+  （png/jpg/jpeg/jfif/gif/webp/bmp/heic/avif）；未知扩展名响亮报错而不是标错。
+  base64 字节只存在于内存与那次 HTTPS 请求中——不进主模型上下文、不落 session 历史。
+  models-store.json 里模型条目的 `api` 字段仅作参考：zen 网关对声明为 openai-completions
+  的模型同样服务 `/responses`（kimi-k2.7-code 实测可用）。
 - **effort**：`off`/`minimal` 直接省略 `reasoning` 字段（zen 网关映射为 null，直传会
   HTTP 400 `invalid_prompt`）。
 - **用量与成本**：工具通过 pi 的 Usage 上报 token 与美元成本——registry 条目成本为默认，

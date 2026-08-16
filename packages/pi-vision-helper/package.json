@@ -2,6 +2,7 @@
   "name": "@yceachan/pi-vision-helper",
   "version": "0.1.0",
   "description": "pi extension + skill: visual understanding via a configurable vision model (pi-registry reuse or custom responses API; default gpt-5.6-luna) when the main model cannot see images — pure TypeScript, single runtime",
+  "type": "module",
   "keywords": [
     "pi-package",
     "pi-extension",
@@ -23,7 +24,8 @@
     "extensions",
     "lib",
     "skills",
-    "README.md"
+    "README.md",
+    "README.zh.md"
   ],
   "publishConfig": {
     "access": "public"
@@ -36,6 +38,9 @@
       "./skills"
     ]
   },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*",
     "@earendil-works/pi-ai": "*"
@@ -43,6 +48,7 @@
   "devDependencies": {
     "@earendil-works/pi-coding-agent": "^0.84.2",
     "@earendil-works/pi-ai": "^0.84.2",
-    "@types/node": "^24"
+    "@types/node": "^24",
+    "typescript": "^5.9.0"
   }
 }

@@ -11,8 +11,13 @@
  * default-luna-search applies — identical to the tool's resolution.
  */
 
-import { loadConfig } from "../../../lib/config";
-import { runVision, resolveTarget } from "../../../lib/vision";
+import { loadConfig } from "../../../lib/config.ts";
+import {
+	MAX_MAX_TOKENS,
+	MIN_MAX_TOKENS,
+	runVision,
+	resolveTarget,
+} from "../../../lib/vision.ts";
 
 function fail(msg: string): never {
 	process.stderr.write(`ERROR: ${msg}\n`);
@@ -68,6 +73,11 @@ function parseArgs(argv: string[]): {
 			case "--max-tokens":
 				maxTokens = Number(next());
 				if (!Number.isFinite(maxTokens)) fail("--max-tokens must be a number");
+				if (maxTokens < MIN_MAX_TOKENS || maxTokens > MAX_MAX_TOKENS) {
+					fail(
+						`--max-tokens must be between ${MIN_MAX_TOKENS} and ${MAX_MAX_TOKENS}, got ${maxTokens}`,
+					);
+				}
 				break;
 			case "--timeout":
 				timeout = Number(next());
@@ -107,20 +117,25 @@ async function main(): Promise<void> {
 
 	const target = resolveTarget(cfg);
 	const maxTokens =
-		args.maxTokens ?? cfg.maxTokens ?? cfg.legacy?.defaults?.maxTokens ?? 4096;
+		args.maxTokens ??
+		cfg.maxTokens ??
+		cfg.legacy?.defaults?.maxTokens ??
+		4096;
 	const timeoutMs = args.timeout ?? cfg.timeoutMs ?? 300_000;
+	const effort =
+		args.effort ?? cfg.defaultEffort ?? cfg.legacy?.defaults?.effort ?? "high";
 
 	process.stderr.write(
 		`[pi-vision-helper] config=${cfg.path ?? "none"} entry=${target.name} ` +
 			`type=${target.type} model=${target.modelId} baseUrl=${target.baseUrl} ` +
-			`key=${target.keyFrom} effort=${args.effort ?? "high"} ` +
+			`key=${target.keyFrom} effort=${effort} ` +
 			`max_tokens=${maxTokens} timeout=${timeoutMs}\n`,
 	);
 
 	const outcome = await runVision(target, {
 		images: args.images,
 		prompt: args.prompt,
-		effort: args.effort,
+		effort,
 		maxTokens,
 		timeoutMs,
 		systemPrompt: cfg.systemPrompt ?? "",
