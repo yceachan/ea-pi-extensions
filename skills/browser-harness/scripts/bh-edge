@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# Connect browser-harness to a dedicated automation Edge (Windows) — zero popups.
+#
+# Preferred path: dedicated Edge instance (port 9333, own profile). Edge 151 pops
+# an "Allow remote debugging" dialog for every new connection to the user's
+# DEFAULT profile — the dedicated instance avoids that entirely (M144+ behavior
+# only applies to the default profile; explicit --remote-debugging-port on a
+# non-default profile needs no confirmation).
+#
+# Fallback path: user's daily Edge via DevToolsActivePort + BU_CDP_WS (login
+# state available, but Windows will pop an Allow dialog once per Edge session).
+set -euo pipefail
+export PATH="$HOME/.local/bin:$PATH"
+
+EDGE_EXE="/mnt/c/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"
+AUTO_PORT=9333
+AUTO_PROFILE='C:\Users\yceachan\AppData\Local\bh-edge\profile'
+
+# --- 1. Ensure dedicated automation Edge is running ---
+if ! curl -s -m 2 "http://localhost:${AUTO_PORT}/json/version" > /dev/null 2>&1; then
+  echo "starting dedicated Edge on :${AUTO_PORT} ..." >&2
+  nohup "$EDGE_EXE" --remote-debugging-port=$AUTO_PORT \
+    --user-data-dir="$AUTO_PROFILE" \
+    --no-first-run --no-default-browser-check --disable-features=Translate \
+    > /tmp/bh-auto-edge.log 2>&1 &
+  for i in $(seq 1 20); do
+    if curl -s -m 2 "http://localhost:${AUTO_PORT}/json/version" > /dev/null 2>&1; then
+      break
+    fi
+    sleep 1
+  done
+fi
+if curl -s -m 2 "http://localhost:${AUTO_PORT}/json/version" > /dev/null 2>&1; then
+  export BU_CDP_URL="http://localhost:${AUTO_PORT}"
+  exec browser-harness
+fi
+
+# --- 2. Fallback: user's daily Edge (needs one Allow click per Edge session) ---
+echo "dedicated Edge unavailable — falling back to daily Edge (an Allow popup may appear on Windows)" >&2
+PORT_FILE="/mnt/c/Users/yceachan/AppData/Local/Microsoft/Edge/User Data/DevToolsActivePort"
+STATE_FILE="$HOME/.config/browser-harness/last-edge-ws"
+if [ ! -f "$PORT_FILE" ]; then
+  echo "ERROR: daily Edge debugging not enabled (edge://inspect/#remote-debugging)" >&2
+  exit 1
+fi
+PORT=$(sed -n '1p' "$PORT_FILE")
+WS_PATH=$(sed -n '2p' "$PORT_FILE")
+WS="ws://localhost:${PORT}${WS_PATH}"
+if [ ! -f "$STATE_FILE" ] || [ "$(cat "$STATE_FILE")" != "$WS" ]; then
+  export BU_CDP_WS="$WS"
+  browser-harness <<'PY' >/dev/null 2>&1 || true
+try:
+    restart_daemon()
+except Exception:
+    pass
+PY
+  echo "$WS" > "$STATE_FILE"
+fi
+export BU_CDP_WS="$WS"
+exec browser-harness

@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# Close the dedicated automation Edge (port 9333, profile bh-edge\profile).
+#
+# Two modes:
+#   bh-edge-close tabs   — close only page tabs, keep the browser running
+#                          (use this to clean up accumulated tabs after tasks)
+#   bh-edge-close all    — kill the whole dedicated instance (default)
+#
+# Never touches the user's daily Edge: filters strictly by command line
+# containing 'bh-edge\profile' (see references/wsl-edge.md gotchas).
+set -euo pipefail
+
+MODE="${1:-all}"
+
+if [ "$MODE" = "tabs" ] && curl -s -m 2 "http://localhost:9333/json/list" >/dev/null 2>&1; then
+  # /json/close works on the dedicated instance (its HTTP API is functional,
+  # unlike the daily Edge toggle mode which 404s /json/version).
+  curl -s -m 5 "http://localhost:9333/json/list" \
+    | python3 -c '
+import json, sys, urllib.request
+base = "http://localhost:9333/json/close/"
+tabs = json.load(sys.stdin)
+pages = [t for t in tabs if t["type"] == "page"]
+for t in pages:
+    urllib.request.urlopen(base + t["id"], timeout=5)
+print("closed %d tab(s)" % len(pages))
+'
+  exit 0
+fi
+
+# Kill the dedicated instance only (command line matches bh-edge\profile).
+powershell.exe -NoProfile -Command \
+  "Get-CimInstance Win32_Process -Filter \"Name='msedge.exe'\" | Where-Object { \$_.CommandLine -like '*bh-edge\\profile*' } | ForEach-Object { Stop-Process -Id \$_.ProcessId -Force }" 2>/dev/null || \
+powershell.exe -NoProfile -Command \
+  "Get-CimInstance Win32_Process -Filter \"Name='msedge.exe'\" | Where-Object { \$_.CommandLine -like '*bh-edge\\\\profile*' } | ForEach-Object { Stop-Process -Id \$_.ProcessId -Force }"
+
+sleep 1
+if curl -s -m 2 "http://localhost:9333/json/version" >/dev/null 2>&1; then
+  echo "dedicated Edge still running" >&2; exit 1
+fi
+# Wipe session-restore state: otherwise the next launch resurrects every tab
+# from the previous session (the reason tabs appeared to accumulate forever).
+PROFILE='C:\Users\yceachan\AppData\Local\bh-edge\profile'
+powershell.exe -NoProfile -Command \
+  "Remove-Item '$PROFILE\Default\Sessions\*' -Force -ErrorAction SilentlyContinue; Remove-Item '$PROFILE\Default\Session Storage\*' -Recurse -Force -ErrorAction SilentlyContinue" 2>/dev/null
+echo "dedicated Edge stopped, session wiped (next bh-edge run auto-relaunches clean)"

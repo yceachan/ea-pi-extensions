@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+# Headless Edge (Chromium) — the DEFAULT browser path on this machine.
+#
+# Chrome is not installed here; Windows Edge is the Chromium browser.
+# Headless-first policy: use this for screenshots, vision, public scraping,
+# and interactive automation on pages without bot protection. Nothing is
+# left running afterwards.
+#
+# Modes:
+#   bh-headless shot <url> <out.png> [WxH]
+#       one-shot viewport screenshot straight into the WSL filesystem.
+#   bh-headless            (stdin = browser-harness script)
+#       interactive CDP session: fresh temp profile on :9335, BU_CDP_URL
+#       exported; the instance is force-killed and its profile deleted on
+#       exit (trap EXIT) — zero leftover tabs, guaranteed by mechanism.
+#
+# Escalate to the headed dedicated Edge (scripts/bh-edge) only for login
+# state or bot-protected pages — and then run `bh-edge-close all`
+# afterwards (MANDATORY, see SKILL.md "This Machine" section).
+set -euo pipefail
+export PATH="$HOME/.local/bin:$PATH"
+
+EDGE="/mnt/c/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"
+PORT=9335
+PROFILE_WIN='C:\Users\yceachan\AppData\Local\Temp\bh-headless\profile'
+
+_kill_headless() {
+  powershell.exe -NoProfile -Command \
+    "Get-CimInstance Win32_Process -Filter \"Name='msedge.exe'\" | Where-Object { \$_.CommandLine -like '*bh-headless*profile*' } | ForEach-Object { Stop-Process -Id \$_.ProcessId -Force }" \
+    >/dev/null 2>&1 || true
+  # Stop-Process is async on Windows; retry the drvfs rm until handles release.
+  local p
+  p="$(wslpath -u "$PROFILE_WIN")"
+  for _ in $(seq 1 10); do
+    rm -rf "$p" 2>/dev/null && break
+    sleep 1
+  done
+}
+
+# --- shot mode: one-shot screenshot, nothing left running ---
+if [ "${1:-}" = "shot" ]; then
+  [ $# -ge 3 ] || { echo "usage: bh-headless shot <url> <out.png> [WxH]" >&2; exit 2; }
+  url="$2"; out="$3"; size="${4:-1400x900}"
+  out_win="$(wslpath -w "$out")"
+  "$EDGE" --headless=new --disable-gpu --hide-scrollbars \
+    --window-size="$size" --screenshot="$out_win" \
+    --virtual-time-budget=10000 "$url" 2>/dev/null
+  echo "screenshot: $out"
+  exit 0
+fi
+
+# --- interactive mode: headless CDP session, auto-destroyed on exit ---
+rm -rf "$(wslpath -u "$PROFILE_WIN")" 2>/dev/null || true
+nohup "$EDGE" --headless=new --remote-debugging-port=$PORT \
+  --user-data-dir="$PROFILE_WIN" --no-first-run --no-default-browser-check \
+  --disable-gpu > /tmp/bh-headless.log 2>&1 &
+trap _kill_headless EXIT
+for i in $(seq 1 20); do
+  curl -s -m 2 "http://localhost:$PORT/json/version" >/dev/null 2>&1 && break
+  sleep 1
+done
+curl -s -m 2 "http://localhost:$PORT/json/version" >/dev/null 2>&1 || {
+  echo "headless Edge failed to start on :$PORT — see /tmp/bh-headless.log" >&2
+  exit 1
+}
+export BU_CDP_URL="http://localhost:$PORT"
+# No exec here: exec would replace bash and the EXIT trap above would never
+# fire. Plain call -> on return/exit the trap kills the headless instance.
+browser-harness
+exit $?
