@@ -2,7 +2,7 @@
 title: ea-pi-extensions Git 提交规范
 tags: [git, commit, conventional-commits, monorepo, release, changelog]
 desc: 提交信息格式（type/scope 词表）、提交卫生、release 提交与 changelog 纪律、分支与 PR 约定
-update: 2026-08-12
+update: 2026-08-16
 ---
 
 # ea-pi-extensions Git 提交规范
@@ -24,10 +24,10 @@ mindmap
       "禁用命令"
     "Release 提交"
       "仅脚本生成"
-      "release: vX.Y.Z"
+      "release: <pkg>@<ver>"
       "三个守卫"
     "Changelog"
-      "changelog/vX.Y.Z/log.md"
+      "changelog/<pkg>/vX.Y.Z/log.md"
       "随 feat 一次提交"
       "docs-changelog-次选"
     "分支与 PR"
@@ -35,7 +35,7 @@ mindmap
       "外部走 PR"
 ```
 
-本规范与上游 pi 仓库同源：`type(scope): subject` 的格式与措辞惯例取自 pi 的 AGENTS.md 与提交历史，scope 词表按本仓库的四个包调整。**文档用中文，提交信息用英文**（与 pi 及本仓库现有提交一致，日志可 grep、gallery 国际化）。
+本规范与上游 pi 仓库同源：`type(scope): subject` 的格式与措辞惯例取自 pi 的 AGENTS.md 与提交历史，scope 词表按本仓库的五个包调整。**文档用中文，提交信息用英文**（与 pi 及本仓库现有提交一致，日志可 grep、gallery 国际化）。
 
 ## 提交信息格式
 
@@ -49,18 +49,18 @@ type(scope): subject
 | --- | --- | --- |
 | `feat` | 新功能、新包、新扩展 | `feat(pi-shelld): add TUI monitor for background shells` |
 | `fix` | 缺陷修复 | `fix(pi-gadget): archive session on /clear` |
-| `docs` | 文档与 changelog | `docs(changelog): v0.1.2` |
+| `docs` | 文档与 changelog | `docs(changelog): pi-gadget v0.3.0` |
 | `chore` | 杂务：依赖、元数据、基线对齐 | `chore: bump devDependencies` |
 | `refactor` | 行为不变的重构 | `refactor(pi-shelld): extract poll loop` |
 | `test` | 测试新增/修改 | `test(pi-switch-cwd): cover path edge cases` |
 | `ci` | CI 流水线与发布管线 | `ci: publish the package named by the tag` |
-| `release` | 发版提交——**仅由 mono-release.mjs 生成，禁止手写** | `release: v0.1.2` |
+| `release` | 发版提交——**仅由 mono-release.mjs 生成，禁止手写** | `release: pi-gadget@0.3.0` |
 
 不预占 `perf` / `build` / `style` / `revert`：本仓库无对应场景，出现时归入最接近的既有类型并在 subject 说明。
 
 ### scope 词表
 
-- **包名（单一包变更必填）**：`pi-gadget` / `pi-better-mermaid` / `pi-oc-go-luna-vision` / `pi-shelld` / `pi-switch-cwd`
+- **包名（单一包变更必填）**：`pi-gadget` / `pi-better-mermaid` / `pi-shelld` / `pi-switch-cwd` / `pi-vision-helper`
 - **跨切面**：`scripts`（工具脚本）、`ci`（workflow）、`docs`（文档）、`release`（发版流程）、`changelog`（发布说明）、`root`（根 manifest / workspace 配置）
 - 同时涉及多个包或无法归属时**省略 scope**：`feat: ...`
 

@@ -1,5 +1,7 @@
 # ea-pi-extensions
 
+**English | [简体中文](README.zh-CN.md)**
+
 A [bun](https://bun.sh) workspace monorepo for [yceachan](https://github.com/yceachan)'s pi-extensions. Each package carries its own semver version; a release bumps only the packages it names and each package tag (`<pkg>@<ver>`) is its own publish instruction.
 
 ## Packages
@@ -25,10 +27,13 @@ A [bun](https://bun.sh) workspace monorepo for [yceachan](https://github.com/yce
 ├── gcm                      # bash entry → scripts/gcm.mjs (bun run gcm)
 ├── gbump                    # bash entry → scripts/gbump.mjs (manual release one-click)
 ├── scripts/
+│   ├── lib.mjs              # shared: registry queries, fuzzy scope resolution, ask()
 │   ├── gcm.mjs              # manual commit entry (type/scope validation, fuzzy scope pick)
-│   ├── gbump.mjs            # pre-flight checks → delegates to mono-release
+│   ├── gbump.mjs            # thin wrapper: arg translation → delegates to mono-release
 │   ├── mono-release.mjs     # per-package bump + release commit + package tag + push
-│   └── mono-tagcheck.mjs    # per-package version-number check/align/reset (no git writes)
+│   ├── mono-tagcheck.mjs    # per-package version-number check/align/reset (no git writes)
+│   └── completions/
+│       └── _gbump           # zsh completion (#compdef gbump gcm): -p candidates, flags, type words
 ├── docs/                     # 提交/发版规范 + tag 回退与 CI 容灾 runbook
 │   ├── git提交规范.md
 │   ├── 发行版本控制策略.md
