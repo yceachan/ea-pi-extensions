@@ -9,7 +9,7 @@
 
 - 只提交**本次会话你自己改动**的文件：显式 `git add <path1> <path2>`；
   禁止 `git add -A` / `git add .`（避免夹带其他会话或无关改动）。
-- 提交信息必须走 `./gcm`（type/scope 词表校验、subject ≤50 字符、小写开头、
+- 提交信息必须走 `./gcm`（type/scope 词表校验、subject ≤100 字符、小写开头、
   无 emoji）；`release:` 提交禁止手写，只由 mono-release 生成。
 - 提交前 `git status` 核对暂存范围；提交后报告「提交 hash + 文件清单」。
 - 禁止：`git commit --no-verify`、`git reset --hard`、`git checkout .`、

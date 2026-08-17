@@ -10,7 +10,7 @@ A [bun](https://bun.sh) workspace monorepo for [yceachan](https://github.com/yce
 | --- | --- | --- |
 | [`@yceachan/pi-shelld`](packages/pi-shelld) | `shell_daemon` tool + ⭕shell TUI monitor for long-running background processes | [pi.dev](https://pi.dev/packages) |
 | [`@yceachan/pi-vision-helper`](packages/pi-vision-helper) | config-driven vision delegation (pi-registry reuse or custom responses API) when the main model has no vision — pure TypeScript, single runtime | [pi.dev](https://pi.dev/packages) |
-| [`@yceachan/pi-gadget`](packages/pi-gadget) | single-file utilities: `/clear` session archiving, `/exit`, `pi_cite_wslpath` (WSL path → Windows-Terminal-openable hyperlink, batch `paths[]`, agent_end leak force-check) | [pi.dev](https://pi.dev/packages) |
+| [`@yceachan/pi-gadget`](packages/pi-gadget) | single-file utilities: `/clear` session archiving, `/exit`, `pi-cite-wslpath` (WSL path → Windows-Terminal-openable hyperlink, batch `paths[]`, agent_end leak force-check) | [pi.dev](https://pi.dev/packages) |
 | [`@yceachan/pi-switch-cwd`](packages/pi-switch-cwd) | `/cwd` — switch the session working directory | [pi.dev](https://pi.dev/packages) |
 | [`@yceachan/pi-better-mermaid`](packages/pi-better-mermaid) | `better-mermaid` — bundles the writing-mermaid rules as a skill, gates the agent-delivered diagram with mmdc validation, loops on structured errors (3 strikes) · [capability evals](packages/pi-better-mermaid/skills/better-mermaid/evals/README.md) | [pi.dev](https://pi.dev/packages) |
 

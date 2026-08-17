@@ -10,7 +10,7 @@
  *   - `file:///C:/...`                (drvfs: /mnt/<drive> IS the Windows drive)
  *   - `file://wsl.localhost/<distro>/...`  (9P bridge, WT >= 1.17)
  *
- * The `pi_cite_wslpath` tool lets the model convert any native path to a
+ * The `pi-cite-wslpath` tool lets the model convert any native path to a
  * clickable markdown link directly, without hard-coding the conversion rules
  * in the system prompt. Paths arrive as a `paths` array, so one tool call
  * converts any number of paths — citing several files costs a single request
@@ -364,7 +364,7 @@ export function findDeliveredBrokenLinks(
 // pi-lens-ignore: high-fan-out
 export default function (pi: ExtensionAPI) {
 	pi.registerTool({
-		name: "pi_cite_wslpath",
+		name: "pi-cite-wslpath",
 		label: "Cite WSL Path",
 		description:
 			"Convert a native (WSL) file path into a Windows-Terminal-openable markdown hyperlink. " +
@@ -377,11 +377,11 @@ export default function (pi: ExtensionAPI) {
 			"Call this whenever you cite or print file paths in your reply — " +
 			"batch them into a single `paths` array instead of one call per path.",
 		promptSnippet:
-			"pi_cite_wslpath: native paths (batch `paths` array) -> Windows-openable markdown links (Ctrl+click opens in Windows Terminal)",
+			"pi-cite-wslpath: native paths (batch `paths` array) -> Windows-openable markdown links (Ctrl+click opens in Windows Terminal)",
 		promptGuidelines: [
-			"When citing file paths in replies, call pi_cite_wslpath first and paste its returned markdown link verbatim into chat text.",
+			"When citing file paths in replies, call pi-cite-wslpath first and paste its returned markdown link verbatim into chat text.",
 			"Never emit raw file:///home/..., file:///tmp/... or file:///mnt/... links — Windows Terminal rejects them.",
-			"Batch multiple file paths into one pi_cite_wslpath call (paths array) instead of one call per path.",
+			"Batch multiple file paths into one pi-cite-wslpath call (paths array) instead of one call per path.",
 		],
 		parameters: Type.Object({
 			paths: Type.Array(Type.String(), { minItems: 1, maxItems: 20 }),

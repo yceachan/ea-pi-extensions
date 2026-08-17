@@ -5,7 +5,7 @@
 //   1. type 词表校验（feat/fix/docs/chore/refactor/test/ci，release 仅脚本生成）
 //   2. scope 解析: 包名自动扫描 packages/*，支持模糊搜索 + 二次确认；
 //      二级匹配 packages/*/ 下裸根 .ts 小工具并归到母包
-//   3. subject 校验: ≤50 字符、小写开头、无 emoji、英文
+//   3. subject 校验: ≤100 字符、小写开头、无 emoji、英文
 //   4. 提交卫生: 只提交已显式暂存的内容，绝不替你 git add
 //   5. --dry: 走完整校验 + 可达性检查，但只回显构造出的命令，不落库
 //   6. -c: changelog 骨架模式——创建 changelog/<pkg>/v<ver>/log.md 并打印
@@ -47,7 +47,7 @@ const HELP = `gcm — 复合 commit message 规范入口（开发者手动运维
                          小工具归到母包（如 cite-wslpath → pi-gadget）
                          非精确命中必须二次确认: TTY 下回车确认首选 / 输入
                          序号或完整包名；非交互需 -y 确认唯一候选
-  -m, --message <subject>  必填。主题: 祈使句、小写开头、≤50 字符、无 emoji
+  -m, --message <subject>  必填。主题: 祈使句、小写开头、≤100 字符、无 emoji
   -b, --body <body>      可选。body（非显然变更必写，可含 \\n 换行）
       --print            只打印拼好的提交信息，不执行 git（供 agent/管道使用）
       --dry              验证模式: 走完整校验 + git 可达性检查（在仓库内、
@@ -337,9 +337,9 @@ async function changelogMode() {
 
 function validateSubject(subject) {
 	if (subject === undefined || subject.trim() === "") fail("-m <主题> 必填");
-	if (subject.length > 50) {
+	if (subject.length > 100) {
 		fail(
-			`主题 ${subject.length}/50 字符超限（规范: subject 不超过 50 字符）——请精简`,
+			`主题 ${subject.length}/100 字符超限（规范: subject 不超过 100 字符）——请精简`,
 		);
 	}
 	if (

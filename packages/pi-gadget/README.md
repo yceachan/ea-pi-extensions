@@ -5,7 +5,7 @@ gadgets, each living in one file:
 
 - **`/clear`** — archive the current session (moves it out of the way while keeping it resumable)
 - **`/exit`** — exit pi cleanly
-- **`pi_cite_wslpath`** — tool for the model: converts native (WSL) paths into Windows-Terminal-openable markdown hyperlinks, because `file:///home/...` / `file:///mnt/c/...` links are rejected by Windows Terminal. Takes a `paths[]` batch in one call; an `agent_end` hook force-checks every delivered reply for un-converted links and posts a clickable report (detect-and-tell)
+- **`pi-cite-wslpath`** — tool for the model: converts native (WSL) paths into Windows-Terminal-openable markdown hyperlinks, because `file:///home/...` / `file:///mnt/c/...` links are rejected by Windows Terminal. Takes a `paths[]` batch in one call; an `agent_end` hook force-checks every delivered reply for un-converted links and posts a clickable report (detect-and-tell)
 
 ## Install
 
@@ -18,7 +18,7 @@ pi install npm:@yceachan/pi-gadget
 Run `/clear` to archive the active session, `/exit` to quit pi. Both commands are plain
 slash-command extensions; see the source files for exact behavior.
 
-`pi_cite_wslpath` is a tool the model calls to cite file paths clickable in Windows
+`pi-cite-wslpath` is a tool the model calls to cite file paths clickable in Windows
 Terminal (Ctrl+click). Conversion rules: `/mnt/<drive>/...` → `file:///<DRIVE>:/...`,
 other Linux paths → `file://wsl.localhost/<distro>/...` (Windows Terminal ≥ 1.17).
 Outside WSL it falls back to the standard `file://` URI.

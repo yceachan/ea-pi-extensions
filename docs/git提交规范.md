@@ -66,7 +66,7 @@ type(scope): subject
 
 ### subject 规则
 
-- 祈使句、小写开头、不超过 50 字符（pi 惯例：informative and concise）
+- 祈使句、小写开头、不超过 100 字符（pi 惯例：informative and concise）
 - 说清**改了什么**，不说"改代码"：`fix(pi-shelld): drain zombie shells on session end` ✓，`fix stuff` ✗
 - **禁止 emoji**（与 pi AGENTS.md 一致）
 - 涉及 issue/PR 时以 `(#NNNN)` 结尾（外部 PR 场景）
@@ -88,7 +88,7 @@ bun run gcm -- -t fix -p shelld -m "drain zombie shells on session end"
   小工具并归到母包（`-p cite-wslpath` → `pi-gadget`）。TTY 下回车确认首选、输入序号或
   完整包名精确指定；非交互 `-y` 接受唯一候选
 - `--list` 列出全部 packages@versions（如 `pi-gadget@0.2.1`）
-- `-m` 校验 ≤50 字符、小写开头、无 emoji（违规直接拦截，中文/大写首字母告警）
+- `-m` 校验 ≤100 字符、小写开头、无 emoji（违规直接拦截，中文/大写首字母告警）
 - `-c` changelog 骨架模式：`./gcm -c -p <pkg> --minor` 创建
   `changelog/<pkg>/vX.Y.Z/log.md` 骨架并打印提交提示（版本也可用
   `--patch/--major/--set-ver`，必须高于该包 registry 基线；只创建文件，
@@ -149,7 +149,7 @@ changelog/
 # pi-gadget v0.3.0
 
 ## feat
-- pi_cite_wslpath: ...
+- pi-cite-wslpath: ...
 
 ## fix
 - ...
