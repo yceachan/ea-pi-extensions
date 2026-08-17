@@ -8,7 +8,7 @@
 // Per-package model (see docs/发行版本控制策略.md): packages share no version;
 // each advances its own semver by its own change type.
 
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -37,9 +37,9 @@ const HELP = `mono-release — 逐包发版仪式（bump + 锁文件同步 + rel
     major=破坏性），或 --set-ver 显式指定目标版本（须高于当前）；
     一次调用可发多包 = 一个 release 提交 + N 个 tag
   - tag 格式 <pkg>@<ver>（如 pi-gadget@0.3.0）; CI 以 tag 为唯一发布指令
-  - 守卫: 干净工作区 → 逐包（本地版本 == registry 基线 → 该包自上个逐包
-    tag 以来有实质变更（无基线时仅告警）→ changelog/<pkg>/v<ver>/log.md
-    已存在且含实质条目 → tag 未在本地存在）
+  - 守卫: 干净工作区 → README 包清单同步（./sync-readme --check）→ 逐包（本地版本
+    == registry 基线 → 该包自上个逐包 tag 以来有实质变更（无基线仅告警）→
+    changelog/<pkg>/v<ver>/log.md 已存在且含实质条目 → tag 未在本地存在）
   - --dry-run: 完整走查守卫并打印计划，不写文件、不碰 git
 
 前置条件: git 远端已配置; changelog 按纪律手工提交（docs/changelog: 见提交规范）
@@ -172,6 +172,20 @@ const dirty = gitDirty(root);
 if (dirty.length > 0) {
 	console.error("✗ working tree is not clean — commit or stash first:");
 	for (const line of dirty.split("\n").slice(0, 10)) console.error(`  ${line}`);
+	process.exit(1);
+}
+
+// ── Guard: README package table / install block must be in sync ──────────
+// ./sync-readme --check 只读比对两处 README 的包清单表格与安装块是否与
+// packages/* 一致；过期（out of date）说明新增包未登记进 README：
+// 发布前强制重建，避免 release 后 README 与发布物脱节。
+try {
+	execFileSync(process.execPath, ["scripts/sync-readme.mjs", "--check"], {
+		cwd: root,
+		stdio: "inherit",
+	});
+} catch {
+	console.error("  README 包清单过期——先运行 ./sync-readme 重建后重试发版");
 	process.exit(1);
 }
 

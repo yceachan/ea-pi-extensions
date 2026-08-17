@@ -8,28 +8,32 @@ A [bun](https://bun.sh) workspace monorepo for [yceachan](https://github.com/yce
 
 | Package | Description | Gallery |
 | --- | --- | --- |
-| [`@yceachan/pi-shelld`](packages/pi-shelld) | `shell_daemon` tool + ⭕shell TUI monitor for long-running background processes | [pi.dev](https://pi.dev/packages) |
-| [`@yceachan/pi-vision-helper`](packages/pi-vision-helper) | config-driven vision delegation (pi-registry reuse or custom responses API) when the main model has no vision — pure TypeScript, single runtime | [pi.dev](https://pi.dev/packages) |
-| [`@yceachan/pi-gadget`](packages/pi-gadget) | single-file utilities: `/clear` session archiving, `/exit`, `pi-cite-wslpath` (WSL path → Windows-Terminal-openable hyperlink, batch `paths[]`, agent_end leak force-check) | [pi.dev](https://pi.dev/packages) |
-| [`@yceachan/pi-switch-cwd`](packages/pi-switch-cwd) | `/cwd` — switch the session working directory | [pi.dev](https://pi.dev/packages) |
-| [`@yceachan/pi-better-mermaid`](packages/pi-better-mermaid) | `better-mermaid` — bundles the writing-mermaid rules as a skill, gates the agent-delivered diagram with mmdc validation, loops on structured errors (3 strikes) · [capability evals](packages/pi-better-mermaid/skills/better-mermaid/evals/README.md) | [pi.dev](https://pi.dev/packages) |
+| [`@yceachan/pi-better-btw`](packages/pi-better-btw) | Fork of nicobailon/pi-side-chat (https://github.com/nicobailon/pi-side-chat) — /btw (alias /side) forks the current conversation into a non-capturing side-chat overlay: read-only lane with lane enforcement, prompt pack, shared-prefix caching, mouse select/copy — while the main agent keeps working | [pi.dev](https://pi.dev/packages/@yceachan/pi-better-btw) |
+| [`@yceachan/pi-better-mermaid`](packages/pi-better-mermaid) | `better-mermaid` — bundles the writing-mermaid rules as a skill, gates the agent-delivered diagram with mmdc validation, loops on structured errors (3 strikes) · [capability evals](packages/pi-better-mermaid/skills/better-mermaid/evals/README.md) | [pi.dev](https://pi.dev/packages/@yceachan/pi-better-mermaid) |
+| [`@yceachan/pi-gadget`](packages/pi-gadget) | single-file utilities: `/clear` session archiving, `/exit`, `pi-cite-wslpath` (WSL path → Windows-Terminal-openable hyperlink, batch `paths[]`, agent_end leak force-check) | [pi.dev](https://pi.dev/packages/@yceachan/pi-gadget) |
+| [`@yceachan/pi-shelld`](packages/pi-shelld) | `shell_daemon` tool + ⭕shell TUI monitor for long-running background processes | [pi.dev](https://pi.dev/packages/@yceachan/pi-shelld) |
+| [`@yceachan/pi-switch-cwd`](packages/pi-switch-cwd) | `/cwd` — switch the session working directory | [pi.dev](https://pi.dev/packages/@yceachan/pi-switch-cwd) |
+| [`@yceachan/pi-vision-helper`](packages/pi-vision-helper) | config-driven vision delegation (pi-registry reuse or custom responses API) when the main model has no vision — pure TypeScript, single runtime | [pi.dev](https://pi.dev/packages/@yceachan/pi-vision-helper) |
 
 ## Structure
 
 ```text
 .
 ├── packages/           # workspace members (bun workspaces)
+│   ├── pi-better-btw/
+│   ├── pi-better-mermaid/
 │   ├── pi-gadget/
-│   ├── pi-vision-helper/
 │   ├── pi-shelld/
 │   ├── pi-switch-cwd/
-│   └── pi-better-mermaid/
+│   └── pi-vision-helper/
 ├── gcm                      # bash entry → scripts/gcm.mjs (bun run gcm)
 ├── gbump                    # bash entry → scripts/gbump.mjs (manual release one-click)
+├── sync-readme              # bash entry → scripts/sync-readme.mjs (README ## Packages table rebuild)
 ├── scripts/
 │   ├── lib.mjs              # shared: registry queries, fuzzy scope resolution, ask()
 │   ├── gcm.mjs              # manual commit entry (type/scope validation, fuzzy scope pick)
 │   ├── gbump.mjs            # thin wrapper: arg translation → delegates to mono-release
+│   ├── sync-readme.mjs      # rebuild README ## Packages table (gallery → per-package pi.dev page)
 │   ├── mono-release.mjs     # per-package bump + release commit + package tag + push
 │   ├── mono-tagcheck.mjs    # per-package version-number check/align/reset (no git writes)
 │   └── completions/
@@ -47,11 +51,12 @@ A [bun](https://bun.sh) workspace monorepo for [yceachan](https://github.com/yce
 ## Install
 
 ```bash
-pi install npm:@yceachan/pi-shelld
-pi install npm:@yceachan/pi-vision-helper
-pi install npm:@yceachan/pi-gadget
-pi install npm:@yceachan/pi-switch-cwd
+pi install npm:@yceachan/pi-better-btw
 pi install npm:@yceachan/pi-better-mermaid
+pi install npm:@yceachan/pi-gadget
+pi install npm:@yceachan/pi-shelld
+pi install npm:@yceachan/pi-switch-cwd
+pi install npm:@yceachan/pi-vision-helper
 ```
 
 ## Development

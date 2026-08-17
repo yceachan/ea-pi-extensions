@@ -30,9 +30,9 @@ const HELP = `gbump — 手工发版一键入口（等价 mono-release 完整守
     仅匹配 packages/* 包名（无跨切面词表；二级小工具名映射到母包，
     如 cite-wslpath → pi-gadget），TTY 下回车确认首选 /
     输入序号或完整包名；非交互下唯一候选需 -y 接受，多候选必须用完整包名
-  - 守卫（mono-release）: 干净工作区 → 逐包（本地版本 == registry 基线 →
-    自上个逐包 tag 有实质变更（无基线仅告警）→ changelog/<pkg>/v<ver>/log.md
-    已存在且含实质条目 → tag 未在本地存在）
+  - 守卫（mono-release）: 干净工作区 → README 包清单同步（./sync-readme --check）→
+    逐包（本地版本 == registry 基线 → 自上个逐包 tag 有实质变更（无基线仅告警）→
+    changelog/<pkg>/v<ver>/log.md 已存在且含实质条目 → tag 未在本地存在）
   - changelog 骨架由 ./gcm -c 创建（见 scripts/gcm.mjs）
 `;
 

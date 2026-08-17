@@ -1,0 +1,32 @@
+#!/usr/bin/bash
+# sync-readme — bash 入口（开发者手动运维）。
+#
+# 转发到 scripts/sync-readme.mjs：只重建 README.md / README.zh-CN.md 的包清单
+# 表格与安装块（结构以 zh README 为准：英文章节标题；包清单取 packages/*
+# 实际目录；说明列既有行原样搬移、新包回退 package.json description；gallery
+# 链接逐包生成 https://pi.dev/packages/@yceachan/<pkg>）。
+# 裸调用（无参数）= 直接写入；--dry 只预览；--check 返回 on date / out of date
+# （bump 流程前置检查用，见 mono-release.mjs 守卫）。
+# 运行时: bun（本仓库是 bun workspace）；bun 缺失时回退 node。
+#
+# 规范: docs/git提交规范.md | 实现: scripts/sync-readme.mjs
+
+set -euo pipefail
+
+# 符号链接调用时 BASH_SOURCE[0] 是链接路径（如 ~/.local/bin/sync-readme），
+# 必须先 readlink -f 解析到真实位置，否则 sync-readme.mjs 定位会失败。
+SCRIPT_DIR="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
+SYNC_JS="$SCRIPT_DIR/scripts/sync-readme.mjs"
+
+if [[ ! -f "$SYNC_JS" ]]; then
+	echo "✗ $SYNC_JS 不存在——sync-readme 需要与 scripts/sync-readme.mjs 同仓库（入口放在仓库根）" >&2
+	exit 1
+fi
+
+if command -v bun >/dev/null 2>&1; then
+	RUNNER=(bun)
+else
+	RUNNER=(node)
+fi
+
+exec "${RUNNER[@]}" "$SYNC_JS" "$@"
