@@ -26,9 +26,12 @@
  * auto-detection cannot join the fragments, so it becomes a dead link.
  *
  * agent_end force-check: after every agent run, the delivered assistant text
- * is scanned for `file://` URIs Windows Terminal would reject (empty-host
- * `file:///` or `file://localhost` with a non-drive first segment — i.e.
- * /home, /tmp, /mnt, ...). When any leaked, the extension reports it
+ * is scanned for two forms Windows Terminal cannot open: `file://` URIs
+ * with a non-drive first segment (empty-host `file:///` or
+ * `file://localhost`, i.e. /home, /tmp, /mnt, ...), and markdown links
+ * whose target is a bare WSL-native absolute POSIX path (`[label](/home/...)`)
+ * — pi renders those, but Windows Terminal has no scheme to resolve them.
+ * When any leak, the extension reports it
  * (detect-and-tell; the delivered text itself is left untouched): a one-line
  * summary via notify, plus a chat custom message with converted links — the
  * `>[!note]` callout below — rendered by the same Markdown→OSC 8 pipeline as
@@ -208,6 +211,25 @@ export function citeWslpath(
 const WINDOWS_BROKEN_FILE_URI_RE =
 	/file:\/\/(?:localhost)?\/(?!\/?[A-Za-z]:)[^\s\x00-\x1f"'<>`),;:#?\u3000-\u303f\uff00-\uffef)\]}]+/g;
 
+/**
+ * Markdown link whose target is a bare WSL-native absolute POSIX path
+ * (`[label](/home/...md)`). The lead-negative lookahead excludes URI-ish
+ * forms (`//host`, `/#anchor`, `/?query`) so only real filesystem paths are
+ * matched; the trailing character class stops at the closing `)`.
+ */
+const NATIVE_PATH_MARKDOWN_LINK_RE =
+	/\[([^\]]*)\]\((\/(?![/#?])[^\s())\]]+)\)/g;
+
+/** A link/URI in delivered text that Windows Terminal cannot open. */
+export interface BrokenLinkHit {
+	/** The raw matched fragment (a file:// URI or a markdown link). */
+	raw: string;
+	/** The WSL-native path recovered from the fragment. */
+	nativePath: string;
+	/** Original markdown label when the hit was a `[label](...)` link. */
+	label?: string;
+}
+
 /** Minimal structural view of a message, enough to scan assistant text. */
 interface MessageLike {
 	role?: string;
@@ -215,39 +237,74 @@ interface MessageLike {
 }
 
 /**
- * Find `file://` URIs in text that Windows Terminal would refuse to open.
- * Deduplicated, first-seen order. Example quotes are skipped: URIs inside
- * backtick code spans or fenced code blocks (they render as plain text, not
- * links), and ones ending in an ellipsis (`...`/`…`) — guideline texts quote
- * exactly these forms.
+ * Find links/URIs in text that Windows Terminal would refuse to open: broken
+ * `file://` URIs and markdown links targeting bare WSL-native POSIX paths.
+ * Deduplicated by recovered path, first-seen order. Example quotes are
+ * skipped: hits inside backtick code spans or fenced code blocks (they render
+ * as plain text, not links), and ones ending in an ellipsis (`...`/`…`) —
+ * guideline texts quote exactly these forms.
  */
-export function findWindowsBrokenFileUris(text: string): string[] {
-	const found: string[] = [];
+export function findWindowsBrokenLinks(text: string): BrokenLinkHit[] {
+	const found: BrokenLinkHit[] = [];
 	const seen = new Set<string>();
+	const hits: { index: number; hit: BrokenLinkHit }[] = [];
+	for (const match of text.matchAll(WINDOWS_BROKEN_FILE_URI_RE)) {
+		hits.push({
+			index: match.index ?? 0,
+			hit: {
+				raw: match[0],
+				nativePath: leakedFileUriToPath(match[0]) ?? match[0],
+			},
+		});
+	}
+	for (const match of text.matchAll(NATIVE_PATH_MARKDOWN_LINK_RE)) {
+		hits.push({
+			index: match.index ?? 0,
+			hit: { raw: match[0], nativePath: match[2], label: match[1] },
+		});
+	}
+	hits.sort((a, b) => a.index - b.index);
 	let lineStart = 0;
 	let inFence = false;
-	for (const match of text.matchAll(WINDOWS_BROKEN_FILE_URI_RE)) {
+	for (const { index, hit } of hits) {
 		// Advance the line state up to the match's line (fence toggling).
 		while (true) {
 			const lineEnd = text.indexOf("\n", lineStart);
 			const end = lineEnd === -1 ? text.length : lineEnd;
-			if (match.index <= end) break;
+			if (index <= end) break;
 			if (isFenceLine(text.slice(lineStart, end))) inFence = !inFence;
 			lineStart = end + 1;
 		}
 		if (inFence) continue;
-		const before = text.slice(lineStart, match.index);
+		const before = text.slice(lineStart, index);
 		let backticks = 0;
 		for (const ch of before) {
 			if (ch === "`") backticks++;
 		}
 		if (backticks % 2 === 1) continue; // inside an inline code span
-		if (match[0].endsWith("...") || match[0].endsWith("…")) continue;
-		if (seen.has(match[0])) continue;
-		seen.add(match[0]);
-		found.push(match[0]);
+		if (matchFragmentsEndInEllipsis(hit.raw)) continue;
+		if (seen.has(hit.nativePath)) continue;
+		seen.add(hit.nativePath);
+		found.push(hit);
 	}
 	return found;
+}
+
+/** Whether the raw fragment ends in an ellipsis (guideline-text quote form). */
+function matchFragmentsEndInEllipsis(raw: string): boolean {
+	return raw.endsWith("...") || raw.endsWith("…");
+}
+
+/**
+ * `file://` URIs in text that Windows Terminal would refuse to open — the
+ * raw matched fragments (kept for compatibility; prefer {@link findWindowsBrokenLinks}).
+ */
+export function findWindowsBrokenFileUris(text: string): string[] {
+	const out: string[] = [];
+	for (const hit of findWindowsBrokenLinks(text)) {
+		if (/^file:\/\//i.test(hit.raw)) out.push(hit.raw);
+	}
+	return out;
 }
 
 /** Fence opener/closer line (``` or ~~~, optionally with a language tag). */
@@ -279,23 +336,25 @@ export function leakedFileUriToPath(uri: string): string | undefined {
 }
 
 /**
- * Scan the assistant message texts of an agent run for leaked Linux
- * `file://` URIs (deduplicated). This is the agent_end force-check.
+ * Scan the assistant message texts of an agent run for links Windows
+ * Terminal cannot open (broken `file://` URIs and native-POSIX-path
+ * markdown links; deduplicated by recovered path). This feeds the
+ * agent_end force-check.
  */
-export function findDeliveredBrokenFileUris(
+export function findDeliveredBrokenLinks(
 	messages: readonly MessageLike[],
-): string[] {
-	const found: string[] = [];
+): BrokenLinkHit[] {
+	const found: BrokenLinkHit[] = [];
 	const seen = new Set<string>();
 	for (const message of messages) {
 		if (message.role !== "assistant") continue;
 		if (typeof message.content === "string" || !message.content) continue;
 		for (const block of message.content) {
 			if (block.type !== "text" || !block.text) continue;
-			for (const uri of findWindowsBrokenFileUris(block.text)) {
-				if (seen.has(uri)) continue;
-				seen.add(uri);
-				found.push(uri);
+			for (const hit of findWindowsBrokenLinks(block.text)) {
+				if (seen.has(hit.nativePath)) continue;
+				seen.add(hit.nativePath);
+				found.push(hit);
 			}
 		}
 	}
@@ -370,14 +429,21 @@ export default function (pi: ExtensionAPI) {
 
 	pi.on("agent_end", (event) => {
 		if (!isWslEnvironment()) return;
-		const leaked = findDeliveredBrokenFileUris(event.messages);
+		const leaked = findDeliveredBrokenLinks(event.messages);
 		if (leaked.length === 0) {
 			pendingLinks = undefined;
 			return;
 		}
-		pendingLinks = leaked.map((uri) => {
-			const path = leakedFileUriToPath(uri);
-			return `- ${path ? citeWslpath(path).markdown : uri}`;
+		pendingLinks = leaked.map((hit) => {
+			const cite = citeWslpath(hit.nativePath);
+			const label =
+				hit.label !== undefined ? escapeMarkdownLabel(hit.label) : cite.label;
+			// Only render links for paths that actually exist — a converted
+			// link to a missing file cannot be opened either (it already
+			// failed the point of the conversion). Report the rest as
+			// plain text with the reason, so the quote is still visible.
+			if (existsSync(hit.nativePath)) return `- [${label}](${cite.uri})`;
+			return `- ${label} — 文件不存在，未转成链接 (${cite.uri})`;
 		});
 	});
 
@@ -388,7 +454,7 @@ export default function (pi: ExtensionAPI) {
 
 		// pi-lens-ignore: no-console-except-error, console-statement
 		console.warn(
-			`[pi-cite-wslpath] Delivered text has ${links.length} file:// link(s) ` +
+			`[pi-cite-wslpath] Delivered text has ${links.length} link(s) ` +
 				`Windows Terminal cannot open; converted links posted to chat.`,
 		);
 		ctx.ui.notify(
