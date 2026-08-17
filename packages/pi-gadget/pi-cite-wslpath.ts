@@ -1,6 +1,6 @@
 /**
  * pi-cite-wslpath — single-file gadget: turn a native (WSL) path into a
- * Windows-Terminal-openable hyperlink text stream.
+ * Windows-Terminal-openable markdown hyperlink.
  *
  * Why: pi runs inside WSL, so tool/agent output that cites files with
  * `file:///home/...`, `file:///tmp/...`, or `file:///mnt/c/...` URIs cannot be
@@ -10,26 +10,29 @@
  *   - `file:///C:/...`                (drvfs: /mnt/<drive> IS the Windows drive)
  *   - `file://wsl.localhost/<distro>/...`  (9P bridge, WT >= 1.17)
  *
- * The `pi_cite_wslpath` tool lets the model convert any native path to
- * clickable hyperlink text directly, without hard-coding the conversion rules
+ * The `pi_cite_wslpath` tool lets the model convert any native path to a
+ * clickable markdown link directly, without hard-coding the conversion rules
  * in the system prompt. Paths arrive as a `paths` array, so one tool call
  * converts any number of paths — citing several files costs a single request
  * instead of N.
  *
- * Returns three interchangeable forms:
- *   - osc8:      raw OSC 8 sequence — paste verbatim into raw output streams;
- *                the terminal registers the hyperlink at write time, so it is
- *                clickable even while the model is still streaming.
- *   - markdown:  [label](uri) — for normal chat replies; pi's markdown
- *                renderer converts it to an OSC 8 hyperlink itself.
- *   - uri:       plain URI text — fallback (relies on the terminal's URL
- *                auto-detection, which only kicks in once output settles).
+ * The tool returns exactly one form per path — a markdown `[label](uri)` —
+ * because that is the only form that survives the pi rendering pipeline and
+ * Windows Terminal's hyperlink handling at any width: pi's Markdown renderer
+ * turns it into an OSC 8 hyperlink, which hides the URL on screen (nothing to
+ * wrap) and registers it as a link the terminal reconstructs across soft wraps.
+ * Raw OSC 8 escape sequences and bare URIs are deliberately NOT returned: a
+ * bare URI is long, wraps on narrow screens, and Windows Terminal's URL
+ * auto-detection cannot join the fragments, so it becomes a dead link.
  *
  * agent_end force-check: after every agent run, the delivered assistant text
  * is scanned for `file://` URIs Windows Terminal would reject (empty-host
  * `file:///` or `file://localhost` with a non-drive first segment — i.e.
- * /home, /tmp, /mnt, ...). A missed cite call can no longer slip through
- * silently: the user gets a warning notification with the converted links.
+ * /home, /tmp, /mnt, ...). When any leaked, the extension reports it
+ * (detect-and-tell; the delivered text itself is left untouched): a one-line
+ * summary via notify, plus a chat custom message with converted links — the
+ * `>[!note]` callout below — rendered by the same Markdown→OSC 8 pipeline as
+ * the chat body, so every link is clickable regardless of terminal width.
  * Quoted examples are skipped (code spans/fences and `...` ellipsis forms),
  * so citing the guideline text itself does not trip the check.
  *
@@ -171,23 +174,16 @@ export function toWindowsFileUri(
 	return pathToFileURL(abs).href;
 }
 
-/** Wrap text in an OSC 8 hyperlink sequence (write-time hyperlink registration). */
-export function osc8(text: string, uri: string): string {
-	return `\x1b]8;;${uri}\x1b\\${text}\x1b]8;;\x1b\\`;
-}
-
 export interface CiteResult {
 	/** Windows-openable file URI. */
 	uri: string;
-	/** Raw OSC 8 hyperlink sequence. */
-	osc8: string;
 	/** Markdown link form (pi chat renders this as an OSC 8 hyperlink). */
 	markdown: string;
 	/** Display label used for the hyperlink. */
 	label: string;
 }
 
-/** Full conversion: native path -> { uri, osc8, markdown, label }. */
+/** Full conversion: native path -> { uri, markdown, label }. */
 export function citeWslpath(
 	nativePath: string,
 	options: CiteOptions = {},
@@ -196,7 +192,6 @@ export function citeWslpath(
 	const label = options.label ?? shortenLabel(nativePath);
 	return {
 		uri,
-		osc8: osc8(label, uri),
 		markdown: `[${escapeMarkdownLabel(label)}](${uri})`,
 		label,
 	};
@@ -212,9 +207,6 @@ export function citeWslpath(
  */
 const WINDOWS_BROKEN_FILE_URI_RE =
 	/file:\/\/(?:localhost)?\/(?!\/?[A-Za-z]:)[^\s\x00-\x1f"'<>`),;:#?\u3000-\u303f\uff00-\uffef)\]}]+/g;
-
-/** How many converted links to include in the agent_end warning. */
-const MAX_WARN_LINKS = 3;
 
 /** Minimal structural view of a message, enough to scan assistant text. */
 interface MessageLike {
@@ -310,44 +302,36 @@ export function findDeliveredBrokenFileUris(
 	return found;
 }
 
+// pi-lens-ignore: high-fan-out
 export default function (pi: ExtensionAPI) {
 	pi.registerTool({
 		name: "pi_cite_wslpath",
 		label: "Cite WSL Path",
 		description:
-			"Convert a native (WSL) file path into Windows-Terminal-openable hyperlink text. " +
+			"Convert a native (WSL) file path into a Windows-Terminal-openable markdown hyperlink. " +
 			"pi runs in WSL, so plain file:///home/... or file:///mnt/c/... links cannot be opened " +
 			"from the terminal; this tool rewrites them to Windows-accessible URIs " +
 			"(/mnt/<drive> -> file:///<DRIVE>:/..., other paths -> file://wsl.localhost/<distro>/...). " +
-			"Returns three interchangeable forms: 'osc8' (raw OSC 8 hyperlink sequence — paste it " +
-			"verbatim into raw output streams; registered at write time, so it is clickable even " +
-			"while pi is still streaming), 'markdown' ([label](uri) — preferred for normal chat " +
-			"replies, pi renders it as a clickable hyperlink), and 'uri' (plain URI fallback). " +
-			"The user opens the link in Windows Terminal with Ctrl+click. " +
+			"Each path returns exactly one markdown link ([label](uri)) — paste it verbatim into " +
+			"your reply; pi renders it as a clickable hyperlink at any terminal width. " +
+			"The user opens it in Windows Terminal with Ctrl+click. " +
 			"Call this whenever you cite or print file paths in your reply — " +
 			"batch them into a single `paths` array instead of one call per path.",
 		promptSnippet:
-			"pi_cite_wslpath: native paths (batch `paths` array) -> Windows-openable OSC 8 / markdown / URI hyperlink text (Ctrl+click opens it in Windows Terminal).",
+			"pi_cite_wslpath: native paths (batch `paths` array) -> Windows-openable markdown links (Ctrl+click opens in Windows Terminal)",
 		promptGuidelines: [
-			"When citing file paths in replies, call pi_cite_wslpath first and use its markdown form in chat text, or its osc8 form when writing a raw text stream.",
+			"When citing file paths in replies, call pi_cite_wslpath first and paste its returned markdown link verbatim into chat text.",
 			"Never emit raw file:///home/..., file:///tmp/... or file:///mnt/... links — Windows Terminal rejects them.",
 			"Batch multiple file paths into one pi_cite_wslpath call (paths array) instead of one call per path.",
 		],
 		parameters: Type.Object({
 			paths: Type.Array(Type.String(), { minItems: 1, maxItems: 20 }),
-			form: Type.Optional(
-				Type.Union([
-					Type.Literal("osc8"),
-					Type.Literal("markdown"),
-					Type.Literal("both"),
-				]),
-			),
 		}),
+		// pi-lens-ignore: long-parameter-list
 		async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-			const form = params.form ?? "both";
 			const sections = params.paths.map((path, index) => {
-				const { uri, osc8: osc8Text, markdown, label } = citeWslpath(path);
-				const parts = [`${index + 1}. path: ${path}`, `   label: ${label}`];
+				const { markdown } = citeWslpath(path);
+				const parts = [`${index + 1}. ${markdown}`];
 				if (isNativePath(path)) {
 					const abs = isAbsolute(path)
 						? resolve(path)
@@ -358,42 +342,45 @@ export default function (pi: ExtensionAPI) {
 						);
 					}
 				}
-				parts.push(`   uri:\n${uri}`);
-				if (form === "osc8" || form === "both") parts.push(`   osc8:\n${osc8Text}`);
-				if (form === "markdown" || form === "both")
-					parts.push(`   markdown:\n${markdown}`);
 				return parts.join("\n");
 			});
 			return {
-				content: [{ type: "text", text: sections.join("\n\n---\n\n") }],
+				content: [{ type: "text", text: sections.join("\n") }],
 				details: {},
 			};
 		},
 	});
 
 	// Force-check the delivered reply for links Windows Terminal cannot open.
-	// A missed pi_cite_wslpath call in the final delivery surfaces here as a
-	// warning notification with the converted links, instead of silently
-	// producing dead links in the transcript.
+	// Detect-and-tell: the delivered text is left untouched; the report is a
+	// one-line notify summary plus a chat custom message whose converted links
+	// go through the same Markdown -> OSC 8 pipeline as the chat body, so they
+	// stay clickable at any terminal width (the URL is hidden on screen —
+	// nothing wraps — and the terminal reconstructs the link across soft wraps).
 	pi.on("agent_end", (event, ctx) => {
 		if (!isWslEnvironment()) return;
 		const leaked = findDeliveredBrokenFileUris(event.messages);
 		if (leaked.length === 0) return;
 
-		const lines = leaked.slice(0, MAX_WARN_LINKS).map((uri) => {
+		const links = leaked.map((uri) => {
 			const path = leakedFileUriToPath(uri);
 			return `- ${path ? citeWslpath(path).markdown : uri}`;
 		});
-		const more =
-			leaked.length > MAX_WARN_LINKS
-				? `\n- ... and ${leaked.length - MAX_WARN_LINKS} more`
-				: "";
-		const message =
+
+		// pi-lens-ignore: no-console-except-error
+		// pi-lens-ignore: console-statement
+		console.warn(
 			`[pi-cite-wslpath] Delivered text has ${leaked.length} file:// link(s) ` +
-			`Windows Terminal cannot open (Linux-side path). Converted:\n` +
-			`${lines.join("\n")}${more}` +
-			`\nAsk the agent to re-cite them via pi_cite_wslpath.`;
-		console.warn(message);
-		ctx.ui.notify(message, "warning");
+				`Windows Terminal cannot open; converted links posted to chat.`,
+		);
+		ctx.ui.notify(
+			`[pi-cite-wslpath] ${leaked.length} 个不可打开的 file:// 链接已转为可点击链接（见下方系统消息）`,
+			"warning",
+		);
+		pi.sendMessage({
+			customType: "pi-cite-wslpath",
+			content: [`>[!note] pi-cite-wslpath auto trans:`, ...links].join("\n"),
+			display: true,
+		});
 	});
 }
