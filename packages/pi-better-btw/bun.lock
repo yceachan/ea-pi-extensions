@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "pi-side-chat",
+      "name": "pi-better-btw",
       "devDependencies": {
         "@earendil-works/pi-agent-core": "^0.84.2",
         "@earendil-works/pi-ai": "^0.84.2",

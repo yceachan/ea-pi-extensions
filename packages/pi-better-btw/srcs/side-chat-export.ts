@@ -5,7 +5,7 @@ import { isFramingMessage } from "./side-chat-messages.ts";
 
 /**
  * Alt+E transcript export: dumps the btw session to
- * `$CWD/.agents/eval/pi-side-chat-<timestamp>.md` as a markdown diagnostic
+ * `$CWD/.agents/eval/pi-better-btw-<timestamp>.md` as a markdown diagnostic
  * artifact (feature/debug work). The forked main-lane context and the
  * framing block are included verbatim, labeled per segment, so the export
  * shows exactly what the btw session saw in its LLM context.
