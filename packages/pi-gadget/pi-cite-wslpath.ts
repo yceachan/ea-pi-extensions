@@ -357,24 +357,42 @@ export default function (pi: ExtensionAPI) {
 	// go through the same Markdown -> OSC 8 pipeline as the chat body, so they
 	// stay clickable at any terminal width (the URL is hidden on screen —
 	// nothing wraps — and the terminal reconstructs the link across soft wraps).
-	pi.on("agent_end", (event, ctx) => {
+	//
+	// Timing: agent_end fires while the run is still active (isStreaming is
+	// true until agent_settled), so pi.sendMessage there would be queued via
+	// steer() instead of rendered — and would even trigger an extra LLM
+	// continuation. Detection therefore happens on agent_end (it carries the
+	// run's messages) and delivery on agent_settled (isStreaming is false,
+	// so the custom message is appended and rendered immediately). Only the
+	// most recent detection is reported; a later run overwrites the pending
+	// report before it is sent.
+	let pendingLinks: string[] | undefined;
+
+	pi.on("agent_end", (event) => {
 		if (!isWslEnvironment()) return;
 		const leaked = findDeliveredBrokenFileUris(event.messages);
-		if (leaked.length === 0) return;
-
-		const links = leaked.map((uri) => {
+		if (leaked.length === 0) {
+			pendingLinks = undefined;
+			return;
+		}
+		pendingLinks = leaked.map((uri) => {
 			const path = leakedFileUriToPath(uri);
 			return `- ${path ? citeWslpath(path).markdown : uri}`;
 		});
+	});
 
-		// pi-lens-ignore: no-console-except-error
-		// pi-lens-ignore: console-statement
+	pi.on("agent_settled", (_event, ctx) => {
+		if (!pendingLinks) return;
+		const links = pendingLinks;
+		pendingLinks = undefined;
+
+		// pi-lens-ignore: no-console-except-error, console-statement
 		console.warn(
-			`[pi-cite-wslpath] Delivered text has ${leaked.length} file:// link(s) ` +
+			`[pi-cite-wslpath] Delivered text has ${links.length} file:// link(s) ` +
 				`Windows Terminal cannot open; converted links posted to chat.`,
 		);
 		ctx.ui.notify(
-			`[pi-cite-wslpath] ${leaked.length} 个不可打开的 file:// 链接已转为可点击链接（见下方系统消息）`,
+			`[pi-cite-wslpath] ${links.length} 个不可打开的 file:// 链接已转为可点击链接（见下方系统消息）`,
 			"warning",
 		);
 		pi.sendMessage({

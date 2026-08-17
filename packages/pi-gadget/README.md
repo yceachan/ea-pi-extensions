@@ -35,7 +35,9 @@ line so a misspelled filename is caught at cite time, before the link is deliver
 On `agent_end` the extension force-checks the delivered assistant text for `file://`
 URIs Windows Terminal would reject (empty-host `file:///...` or `file://localhost`
 with a non-drive first segment, i.e. Linux-side paths). When any leaked, it reports
-rather than rewrites: a one-line notify summary plus a chat custom message
+rather than rewrites, delivering on `agent_settled` (the moment the run is fully
+settled — sending during `agent_end` would otherwise be queued by pi as a steering
+message): a one-line notify summary plus a chat custom message
 (`>[!note] pi-cite-wslpath auto trans:` with the converted markdown links) rendered by
 the same Markdown → OSC 8 pipeline as the chat body, so every link is clickable
 regardless of terminal width. Quoted examples are skipped (code spans, fenced code
