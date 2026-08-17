@@ -1,0 +1,4 @@
+[test]
+# Tests share a process.stdout interception for the OSC 52 fallback;
+# run them serially so the capture array is not raced.
+concurrency = 1

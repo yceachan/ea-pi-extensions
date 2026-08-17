@@ -1,0 +1,18 @@
+{
+  "promptPack": {
+    "framing": "prompts/btw-framing.md",
+    "focusAnchor": "prompts/btw-focus-anchor.md",
+    "laneReminders": {
+      "base": "prompts/lane-reminder-base.md",
+      "escalated": "prompts/lane-reminder-escalated.md",
+      "failedNote": "prompts/lane-failed-note.md",
+      "preamble": "prompts/lane-preamble.md"
+    }
+  },
+  "readOnlyExtensionAllowlist": [
+    "web_search",
+    "source_check",
+    "fetch_content",
+    "get_search_content"
+  ]
+}

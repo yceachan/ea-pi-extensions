@@ -1,0 +1,69 @@
+{
+  "name": "@yceachan/pi-better-btw",
+  "version": "1.0.0",
+  "description": "Fork of nicobailon/pi-side-chat (https://github.com/nicobailon/pi-side-chat) — /btw (alias /side) forks the current conversation into a non-capturing side-chat overlay: read-only lane with lane enforcement, prompt pack, shared-prefix caching, mouse select/copy — while the main agent keeps working",
+  "type": "module",
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "pi",
+    "side-chat",
+    "btw",
+    "overlay",
+    "tui",
+    "coding-agent"
+  ],
+  "author": "yceachan <yceachan@foxmail.com>",
+  "contributors": [
+    "Nico Bailon"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yceachan/ea-pi-extensions.git",
+    "directory": "packages/pi-better-btw"
+  },
+  "homepage": "https://github.com/yceachan/ea-pi-extensions#readme",
+  "files": [
+    "srcs",
+    "prompts",
+    "config.json",
+    "README.md",
+    "README.zh-CN.md",
+    "banner.png"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "pi": {
+    "extensions": [
+      "./srcs/index.ts"
+    ]
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "bun test test/"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-agent-core": "*",
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-tui": "*",
+    "@sinclair/typebox": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-agent-core": "^0.84.2",
+    "@earendil-works/pi-ai": "^0.84.2",
+    "@earendil-works/pi-coding-agent": "^0.84.2",
+    "@earendil-works/pi-tui": "^0.84.2",
+    "@types/node": "^24",
+    "bun-types": "^1.3.14",
+    "typebox": "1.1.38",
+    "typescript": "^6.0.3"
+  },
+  "trustedDependencies": [
+    "@google/genai",
+    "koffi",
+    "protobufjs"
+  ]
+}

@@ -1,0 +1,20 @@
+# pi local state
+.pi/
+.pi-lens.json
+.agents/
+.pi-subagents/
+.ruff_cache/
+
+# Local planning notes
+pi-better-btw-plan.md
+
+# Dependencies
+node_modules/
+
+# Logs & debug artifacts
+*.log
+npm-debug.log*
+
+# OS cruft
+.DS_Store
+Thumbs.db

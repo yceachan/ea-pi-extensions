@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowImportingTsExtensions": true,
+    "forceConsistentCasingInFileNames": true,
+    "types": ["bun-types", "node"],
+    "paths": {
+      "@sinclair/typebox": ["./node_modules/typebox/build/index.d.mts"]
+    }
+  },
+  "include": ["srcs/**/*.ts", "test/**/*.ts"]
+}
