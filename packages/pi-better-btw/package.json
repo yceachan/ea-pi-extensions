@@ -1,6 +1,6 @@
 {
   "name": "@yceachan/pi-better-btw",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Fork of nicobailon/pi-side-chat (https://github.com/nicobailon/pi-side-chat) — /btw (alias /side) forks the current conversation into a non-capturing side-chat overlay: read-only lane with lane enforcement, prompt pack, shared-prefix caching, mouse select/copy — while the main agent keeps working",
   "type": "module",
   "keywords": [

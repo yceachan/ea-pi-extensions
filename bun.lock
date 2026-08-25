@@ -7,7 +7,7 @@
     },
     "packages/pi-better-btw": {
       "name": "@yceachan/pi-better-btw",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "devDependencies": {
         "@earendil-works/pi-agent-core": "^0.84.2",
         "@earendil-works/pi-ai": "^0.84.2",
