@@ -1,0 +1,3 @@
+[submodule "skills/diagram-design"]
+	path = skills/diagram-design
+	url = https://github.com/cathrynlavery/diagram-design.git
