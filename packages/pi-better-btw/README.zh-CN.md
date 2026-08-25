@@ -20,7 +20,7 @@
 ```bash
 pi install npm:@yceachan/pi-better-btw
 #in pi tui
-> /btw  || or Alt+Q
+> /btw  || or Alt+W
 ```
 
 你在处理一个较长任务时，想顺便问点小事又不想打断主线——查一个 API 细节、验证一个思路、搜点东西，或者看看主线 agent 在干什么。打开BTW Tui OverLay，提问，关闭。主线线程完全不受打扰。
@@ -54,13 +54,13 @@ pi install npm:@yceachan/pi-better-btw
 
 ## Usage
 
-用 `/btw`（别名 `/side`）或 `Alt+Q`（同时负责后台/显示切换）打开旁路会话。提问后按 `Enter`。
+用 `/btw`（别名 `/side`）或 `Alt+W`（同时负责后台/显示切换）打开旁路会话。提问后按 `Enter`。
 
-按 `Esc` 关闭。用 `/btw` 或 `Alt+Q` 重新打开，会话继续保留。
+按 `Esc` 关闭。用 `/btw` 或 `Alt+W` 重新打开，会话继续保留。
 
 | 快捷键 | 作用 |
 | ------ | ---- |
-| `Alt+Q` | 打开（关闭时）/ 后台化（显示时）/ 恢复（隐藏时） |
+| `Alt+W` | 打开（关闭时）/ 后台化（显示时）/ 恢复（隐藏时） |
 | `Ctrl+T` | 切换只读 / 编辑模式 |
 | `Alt+R` | 从最新主线上下文重新 fork |
 | `Alt+N` | 开始空白对话 |
@@ -75,7 +75,7 @@ What is the main agent doing right now?
 What changed since I opened this side chat?
 ```
 
-**非抢占浮层 + 后台化** —— 浮层在屏幕顶部打开，主编辑器保持可见。浮层打开期间始终聚焦；`Alt+Q` 将其后台化（隐藏，agent 继续流式输出）交还键盘，再按 `Alt+Q` 恢复显示。
+**非抢占浮层 + 后台化** —— 浮层在屏幕顶部打开，主编辑器保持可见。浮层打开期间始终聚焦；`Alt+W` 将其后台化（隐藏，agent 继续流式输出）交还键盘，再按 `Alt+W` 恢复显示。
 
 **更高的聊天区域** —— 消息区比上游高约 2.5 倍，长回答和工具输出更易读；在小终端上自适应（不溢出，始终保留主编辑器可见）。
 
@@ -89,7 +89,7 @@ What changed since I opened this side chat?
 
 | 按键 | 作用 |
 | ---- | ---- |
-| `Alt+Q` | 打开（关闭时）/ 后台化（显示时）/ 恢复（隐藏时） |
+| `Alt+W` | 打开（关闭时）/ 后台化（显示时）/ 恢复（隐藏时） |
 | `Enter` | 发送消息 |
 | `Esc` | 中断流式输出；空闲时关闭 |
 | `Alt+R` | 从最新主线上下文重新 fork |
@@ -164,7 +164,7 @@ pi-better-btw 从三个位置按优先级递增读取 `config.json` —— 每�
 
 ## 工作原理
 
-扩展克隆当前会话上下文，创建带全部扩展工具的独立 agent 实例，并在 TUI 浮层中渲染。关闭时在内存中保存对话，重开恢复。后台化（`Alt+Q`）通过 TUI 的 overlay handle 隐藏浮层，agent 继续运行。
+扩展克隆当前会话上下文，创建带全部扩展工具的独立 agent 实例，并在 TUI 浮层中渲染。关闭时在内存中保存对话，重开恢复。后台化（`Alt+W`）通过 TUI 的 overlay handle 隐藏浮层，agent 继续运行。
 
 btw 上下文保留主线的 system prompt 于 system 槽位，并逐字注入 fork 快照，使 btw 请求头成为主线请求的 token 前缀（网关前缀缓存命中）。`forkSurgery`（`srcs/fork-surgery.ts`）让快照的尾部工具交换对网关合法；提示包供给全部注入文本；车道强制在只读模式下包装 `beforeToolCall`/`afterToolCall`（`srcs/side-chat-overlay.ts`）。
 
@@ -195,7 +195,6 @@ btw 上下文保留主线的 system prompt 于 system 槽位，并逐字注入 f
 ├── test/                  # bun test 测试套件（配置解析、鼠标选择）
 ├── config.json            # 内置默认（promptPack 清单 + 只读白名单）
 ├── banner.png
-├── CHANGELOG.md
 └── README.md
 ```
 

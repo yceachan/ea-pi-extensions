@@ -20,7 +20,7 @@
 ```bash
 pi install npm:@yceachan/pi-better-btw
 # in pi tui
-> /btw  || or Alt+Q
+> /btw  || or Alt+W
 ```
 
 You're in the middle of a longer task and want to ask something small without derailing the main thread — check an API detail, sanity-check an approach, search something, or peek at what the main agent is doing. Open the btw TUI overlay, ask, close it. The main thread never gets interrupted.
@@ -54,13 +54,13 @@ You're in the middle of a longer task and want to ask something small without de
 
 ## Usage
 
-Open the side chat with `/btw` (alias `/side`) or `Alt+Q` (which also toggles background/display). Ask a question and press `Enter`.
+Open the side chat with `/btw` (alias `/side`) or `Alt+W` (which also toggles background/display). Ask a question and press `Enter`.
 
-Press `Esc` to close it. Reopen with `/btw` or `Alt+Q` to continue where you left off.
+Press `Esc` to close it. Reopen with `/btw` or `Alt+W` to continue where you left off.
 
 | Shortcut | Action |
 | -------- | ------ |
-| `Alt+Q` | Open (when closed) / background (when visible) / restore (when hidden) |
+| `Alt+W` | Open (when closed) / background (when visible) / restore (when hidden) |
 | `Ctrl+T` | Toggle read-only / edit mode |
 | `Alt+R` | Re-fork from the latest main context |
 | `Alt+N` | Start an empty conversation |
@@ -75,7 +75,7 @@ What is the main agent doing right now?
 What changed since I opened this side chat?
 ```
 
-**Non-capturing overlay + backgrounding** — the overlay opens at the top of the screen so the main editor stays visible underneath. It stays focused while open; `Alt+Q` backgrounds it (hidden, the agent keeps streaming) to hand the keyboard back, and `Alt+Q` restores it.
+**Non-capturing overlay + backgrounding** — the overlay opens at the top of the screen so the main editor stays visible underneath. It stays focused while open; `Alt+W` backgrounds it (hidden, the agent keeps streaming) to hand the keyboard back, and `Alt+W` restores it.
 
 **Taller chat area** — the message area is ~2.5x taller than upstream, so long answers and tool output stay readable; it adapts to small terminals (never overflows, always leaves the main editor visible).
 
@@ -89,7 +89,7 @@ What changed since I opened this side chat?
 
 | Key | Action |
 | ---- | ---- |
-| `Alt+Q` | Open (when closed) / background (when visible) / restore (when hidden) |
+| `Alt+W` | Open (when closed) / background (when visible) / restore (when hidden) |
 | `Enter` | Send message |
 | `Esc` | Interrupt streaming, or close when idle |
 | `Alt+R` | Re-fork from latest main context |
@@ -164,7 +164,7 @@ The bundled `config.json` ships the official pi tool set in the read-only allowl
 
 ## How It Works
 
-The extension clones the current session context, creates a separate agent instance with all extension-registered tools, and renders it in a TUI overlay. Closing saves the conversation in memory so reopening restores it. Backgrounding (`Alt+Q`) hides the overlay via the TUI's overlay handle while the agent keeps running.
+The extension clones the current session context, creates a separate agent instance with all extension-registered tools, and renders it in a TUI overlay. Closing saves the conversation in memory so reopening restores it. Backgrounding (`Alt+W`) hides the overlay via the TUI's overlay handle while the agent keeps running.
 
 The btw context keeps the main lane's system prompt in the system slot and injects the fork snapshot verbatim, so the btw request head is a token prefix of the main request (gateway prefix-cache hits). `forkSurgery` (`srcs/fork-surgery.ts`) makes the trailing tool exchange gateway-legal on the snapshot; the prompt pack supplies all injected prompt text; lane enforcement wraps `beforeToolCall`/`afterToolCall` (`srcs/side-chat-overlay.ts`) in the read-only lane only.
 
@@ -195,7 +195,6 @@ Structure:
 ├── test/                  # bun test suites (config resolution, mouse select)
 ├── config.json            # bundled defaults (promptPack manifest + read-only allowlist)
 ├── banner.png
-├── CHANGELOG.md
 └── README.md
 ```
 

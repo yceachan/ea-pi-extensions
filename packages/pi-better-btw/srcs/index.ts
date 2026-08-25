@@ -4,12 +4,7 @@ import type {
   ExtensionContext,
   ExtensionUIContext,
 } from "@earendil-works/pi-coding-agent";
-import type {
-  KeyId,
-  OverlayHandle,
-  Terminal,
-  TUI,
-} from "@earendil-works/pi-tui";
+import type { OverlayHandle, Terminal, TUI } from "@earendil-works/pi-tui";
 import {
   buildSessionContext,
   ExtensionRunner,
@@ -23,6 +18,7 @@ import {
   SIDE_CHAT_OVERLAY_MAX_HEIGHT,
   type ForkContext,
 } from "./side-chat-overlay.ts";
+import { SIDE_CHAT_SHORTCUT } from "./shortcuts.ts";
 import {
   disableMouseReporting,
   enableMouseReporting,
@@ -60,7 +56,6 @@ function getExtensionAgentTools(): AgentTool[] {
   });
 }
 
-const BACKGROUND_SHORTCUT: KeyId = "alt+q";
 const OVERLAY_BLOCKED_ERROR = "PI_SIDE_CHAT_OVERLAY_BLOCKED";
 
 /** Extension directory: base for the bundle config.json and prompt-pack paths. */
@@ -184,7 +179,7 @@ export default function sideChatExtension(pi: ExtensionAPI) {
         syncMouseReporting();
         return;
       }
-      // The Alt+/ focus toggle was dropped (Alt+Q owns background/restore):
+      // The Alt+/ focus toggle was dropped (Alt+W owns background/restore):
       // the open key only ever brings the chat to the front — a visible but
       // unfocused overlay (e.g. after a mouse refocus) comes back this way,
       // and pressing it while focused is a no-op.
@@ -300,7 +295,7 @@ export default function sideChatExtension(pi: ExtensionAPI) {
     }
   };
 
-  pi.registerShortcut(BACKGROUND_SHORTCUT, {
+  pi.registerShortcut(SIDE_CHAT_SHORTCUT, {
     description: "Open / background / restore the side chat (keeps it running)",
     handler: backgroundSideChat,
   });

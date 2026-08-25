@@ -47,6 +47,7 @@ import {
   SideChatMessages,
   type CellPos,
 } from "./side-chat-messages.ts";
+import { SIDE_CHAT_SHORTCUT } from "./shortcuts.ts";
 import { wrapToolsWithOverlapDetection } from "./tool-wrapper.ts";
 
 export interface ForkContext {
@@ -826,7 +827,7 @@ export class SideChatOverlay implements Component, Focusable {
       }
       return;
     }
-    if (matchesKey(data, Key.alt("q"))) {
+    if (matchesKey(data, SIDE_CHAT_SHORTCUT)) {
       this.options.onBackground();
       return;
     }
@@ -1040,7 +1041,7 @@ function frameLine(
 
 /**
  * Build the fixed two-row key-hint bar. Row 1: scrolling, copy, mode toggle,
- * Esc and send; row 2: the Alt-actions (Alt abbreviated as A, A+q = Alt+Q).
+ * Esc and send; row 2: the Alt-actions (Alt abbreviated as A, A+w = Alt+W).
  * Always two rows — the rows are truncated on narrow terminals rather than
  * collapsing to one line, keeping the message-area height stable.
  */
@@ -1051,6 +1052,6 @@ export function buildSideChatHintLines(options: {
 }): string[] {
   const { scrollHint, escHint, modeHint } = options;
   const primary = `${scrollHint} · C+c copy · ${modeHint} · ${escHint} · Enter send`;
-  const secondary = `A+q bg · A+r fork · A+n new · A+e export`;
+  const secondary = `A+w bg · A+r fork · A+n new · A+e export`;
   return [primary, secondary];
 }
