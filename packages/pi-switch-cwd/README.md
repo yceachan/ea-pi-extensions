@@ -1,5 +1,7 @@
 # pi-switch-cwd
 
+**English | [简体中文](./README.zh-CN.md)**
+
 pi extension: **`/cwd`** — switch the session working directory (the session file moves with it).
 
 ## Why
@@ -37,6 +39,35 @@ only rebuilt when the session runtime is replaced. So `/cwd` **relocates the ses
 **Same session identity** (id unchanged, full history); switching back and forth accumulates
 nothing; if another extension vetoes the switch, the old file is kept untouched. Side effect:
 the session appears in `/resume` only under the directory it currently lives in.
+
+## Long sessions and prompt-prefix caching
+
+`/cwd` preserves the conversation, but it does **not** preserve an identical provider prompt
+prefix. This distinction matters in a long-running session that relies on prompt caching.
+
+| Boundary | Behavior |
+| --- | --- |
+| While `/cwd` runs | No model request is made, so the command itself has no cache-read or token cost. |
+| Session state | Session id, conversation entries, branches, and compaction state are preserved. Nothing is removed from the model's logical context. |
+| First model request after the switch | Pi rebuilds cwd-bound runtime services. The system prompt always contains a different `Current working directory`; project context files, skills, settings, extensions, active tools, or tool schemas may differ too. The serialized prompt therefore diverges before the preserved conversation history. |
+| Cache-miss scope | Provider-dependent. A provider may reuse the common prefix before the first changed token, but the conversation history after that divergence generally cannot be reused as the same cached prefix for this request. Expect a cold or mixed-cache turn, not context loss. |
+| Later requests in the new cwd | The new prompt prefix can warm and receive normal cache hits again. Usually only the first model turn after a stable switch pays the transition cost. |
+| Switching back | The old prefix may hit only if its provider cache entry is still alive, project resources and tool schemas are unchanged, and routing/session affinity reaches that cache. This is an optimization, not a guarantee. |
+| Provider without prompt caching | There is no cache-hit penalty to observe; the rebuilt system prompt and project resources still change model behavior. |
+
+Keeping the same session id, cache key, or session-affinity value does not bypass content-prefix
+matching. Those values can route a request to a cache, but the prompt content must still satisfy
+the provider's matching rules.
+
+For long sessions:
+
+- Prefer one-way phase transitions such as research directory → implementation repository; avoid
+  repeatedly switching between projects when cache latency or input cost matters.
+- If the retained conversation is very large and the switch is a durable phase boundary, consider
+  `/compact` before `/cwd` so the first uncached request in the new cwd is smaller.
+- Use absolute paths instead of `/cwd` for brief cross-directory operations when retaining the
+  current prefix is more important than loading the target project's context, skills, settings,
+  extensions, and cwd-bound tools.
 
 ## Install
 

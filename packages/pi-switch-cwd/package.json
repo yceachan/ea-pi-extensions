@@ -6,7 +6,8 @@
   "files": [
     "index.ts",
     "cwd-utils.ts",
-    "README.md"
+    "README.md",
+    "README.zh-CN.md"
   ],
   "keywords": [
     "pi-package",
