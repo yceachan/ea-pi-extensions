@@ -67,7 +67,7 @@
     },
     "packages/pi-switch-cwd": {
       "name": "@yceachan/pi-switch-cwd",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "devDependencies": {
         "@earendil-works/pi-coding-agent": "^0.84.2",
         "@types/node": "^24.0.0",
