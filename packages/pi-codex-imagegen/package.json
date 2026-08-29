@@ -1,0 +1,49 @@
+{
+  "name": "@yceachan/pi-codex-imagegen",
+  "version": "0.1.0",
+  "description": "pi extension: background Codex imagegen with fixed staging-file delivery through a separately loaded pi-shelld",
+  "type": "module",
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "pi",
+    "codex",
+    "imagegen",
+    "image-generation",
+    "background-process"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yceachan/ea-pi-extensions.git",
+    "directory": "packages/pi-codex-imagegen"
+  },
+  "homepage": "https://github.com/yceachan/ea-pi-extensions#readme",
+  "files": [
+    "pi-codex-imagegen.ts",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "pi": {
+    "extensions": [
+      "./pi-codex-imagegen.ts"
+    ]
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test test/"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "typebox": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "^0.84.2",
+    "@types/node": "^24.0.0",
+    "bun-types": "^1.3.14",
+    "typebox": "^1.3.7",
+    "typescript": "^5.9.0"
+  }
+}

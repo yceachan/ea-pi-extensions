@@ -10,6 +10,7 @@ A [bun](https://bun.sh) workspace monorepo for [yceachan](https://github.com/yce
 | --- | --- | --- |
 | [`@yceachan/pi-better-btw`](packages/pi-better-btw) | Fork of nicobailon/pi-side-chat (https://github.com/nicobailon/pi-side-chat) — /btw (alias /side) forks the current conversation into a non-capturing side-chat overlay: read-only lane with lane enforcement, prompt pack, shared-prefix caching, mouse select/copy — while the main agent keeps working | [pi.dev](https://pi.dev/packages/@yceachan/pi-better-btw) |
 | [`@yceachan/pi-better-mermaid`](packages/pi-better-mermaid) | `better-mermaid` — bundles the writing-mermaid rules as a skill, gates the agent-delivered diagram with mmdc validation, loops on structured errors (3 strikes) · [capability evals](packages/pi-better-mermaid/skills/better-mermaid/evals/README.md) | [pi.dev](https://pi.dev/packages/@yceachan/pi-better-mermaid) |
+| [`@yceachan/pi-codex-imagegen`](packages/pi-codex-imagegen) | locally authenticated Codex `imagegen` with fixed staging-file delivery and separately loaded pi-shelld live monitoring | [pi.dev](https://pi.dev/packages/@yceachan/pi-codex-imagegen) |
 | [`@yceachan/pi-gadget`](packages/pi-gadget) | single-file utilities: `/clear` session archiving, `/exit`, `pi-cite-wslpath` (WSL path → Windows-Terminal-openable hyperlink, batch `paths[]`, agent_end leak force-check) | [pi.dev](https://pi.dev/packages/@yceachan/pi-gadget) |
 | [`@yceachan/pi-shelld`](packages/pi-shelld) | `shell_daemon` tool + ⭕shell TUI monitor for session-scoped persistent background shells (servers, watchers) with live logs and explicit stop/close lifecycle | [pi.dev](https://pi.dev/packages/@yceachan/pi-shelld) |
 | [`@yceachan/pi-switch-cwd`](packages/pi-switch-cwd) | `/cwd` — switch the session working directory | [pi.dev](https://pi.dev/packages/@yceachan/pi-switch-cwd) |
@@ -22,6 +23,7 @@ A [bun](https://bun.sh) workspace monorepo for [yceachan](https://github.com/yce
 ├── packages/           # workspace members (bun workspaces)
 │   ├── pi-better-btw/
 │   ├── pi-better-mermaid/
+│   ├── pi-codex-imagegen/
 │   ├── pi-gadget/
 │   ├── pi-shelld/
 │   ├── pi-switch-cwd/
@@ -53,6 +55,7 @@ A [bun](https://bun.sh) workspace monorepo for [yceachan](https://github.com/yce
 ```bash
 pi install npm:@yceachan/pi-better-btw
 pi install npm:@yceachan/pi-better-mermaid
+pi install npm:@yceachan/pi-codex-imagegen
 pi install npm:@yceachan/pi-gadget
 pi install npm:@yceachan/pi-shelld
 pi install npm:@yceachan/pi-switch-cwd

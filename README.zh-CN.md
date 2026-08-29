@@ -11,17 +11,18 @@
 | --- | --- | --- |
 | [`@yceachan/pi-better-btw`](packages/pi-better-btw) | `/btw`（别名 `/side`）——fork 自 nicobailon/pi-side-chat，把当前对话派生为无捕获的侧聊浮层：只读通道 + 通道约束、提示词包、共享前缀缓存、鼠标选中/复制——主 agent 不受影响继续工作 | [pi.dev](https://pi.dev/packages/@yceachan/pi-better-btw) |
 | [`@yceachan/pi-better-mermaid`](packages/pi-better-mermaid) | `better-mermaid`——把 writing-mermaid 规则打包为 skill，用 mmdc 校验门禁 agent 产出的图，结构化错误循环重试（3 次）· [能力评估](packages/pi-better-mermaid/skills/better-mermaid/evals/README.md) | [pi.dev](https://pi.dev/packages/@yceachan/pi-better-mermaid) |
+| [`@yceachan/pi-codex-imagegen`](packages/pi-codex-imagegen) | 复用本地 Codex 登录态调用 `imagegen`，通过固定 staging 文件交付，并由独立加载的 pi-shelld 展示实时日志、状态与耗时 | [pi.dev](https://pi.dev/packages/@yceachan/pi-codex-imagegen) |
 | [`@yceachan/pi-gadget`](packages/pi-gadget) | 单文件小工具：`/clear` 会话归档、`/exit`、`pi-cite-wslpath`（WSL 路径 → Windows Terminal 可点超链接，批量 `paths[]`，agent_end 交付泄漏强制检查） | [pi.dev](https://pi.dev/packages/@yceachan/pi-gadget) |
 | [`@yceachan/pi-shelld`](packages/pi-shelld) | `shell_daemon` 工具 + ⭕shell TUI 监视器，管理会话级持久后台 shell（服务器、监听器），查看实时日志并控制 stop/close 生命周期 | [pi.dev](https://pi.dev/packages/@yceachan/pi-shelld) |
 | [`@yceachan/pi-switch-cwd`](packages/pi-switch-cwd) | `/cwd`——切换会话工作目录 | [pi.dev](https://pi.dev/packages/@yceachan/pi-switch-cwd) |
 | [`@yceachan/pi-vision-helper`](packages/pi-vision-helper) | 主模型无视觉能力时的配置驱动视觉委托（复用 pi-registry 或自定义 responses API）——纯 TypeScript、单一 runtime | [pi.dev](https://pi.dev/packages/@yceachan/pi-vision-helper) |
-
 
 ## Install
 
 ```bash
 pi install npm:@yceachan/pi-better-btw
 pi install npm:@yceachan/pi-better-mermaid
+pi install npm:@yceachan/pi-codex-imagegen
 pi install npm:@yceachan/pi-gadget
 pi install npm:@yceachan/pi-shelld
 pi install npm:@yceachan/pi-switch-cwd
@@ -34,6 +35,7 @@ pi install npm:@yceachan/pi-vision-helper
 ├── packages/           # workspace 成员（bun workspaces）
 │   ├── pi-better-btw/
 │   ├── pi-better-mermaid/
+│   ├── pi-codex-imagegen/
 │   ├── pi-gadget/
 │   ├── pi-shelld/
 │   ├── pi-switch-cwd/
