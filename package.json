@@ -12,7 +12,10 @@
     "version:sync": "bun scripts/mono-tagcheck.mjs --sync",
     "version:reset": "bun scripts/mono-tagcheck.mjs --reset",
     "typecheck": "bun run --filter '*' typecheck",
-    "test:version-control": "bun test scripts/tests/version-control-workflow.test.mjs",
+    "test": "bun run test:repo && bun run test:packages",
+    "test:repo": "bun test scripts/tests/",
+    "test:packages": "bun run --workspaces --sequential --no-exit-on-error --if-present test",
+    "test:e2e": "bun run --workspaces --sequential --no-exit-on-error --if-present test:e2e",
     "gbump": "./gbump"
   },
   "private": true

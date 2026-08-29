@@ -31,6 +31,10 @@
       "./index.ts"
     ]
   },
+  "scripts": {
+    "test": "bun ./cwd-utils.test.ts",
+    "test:e2e": "bash ./e2e-test.sh"
+  },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*"
   },
