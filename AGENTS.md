@@ -2,6 +2,8 @@
 
 ## 测试注册纪律
 
+测试编排机制与注册示例见[docs/test-CI-Guide.md](docs/test-CI-Guide.md)，本文列出红线。
+
 - 新增或迁移默认自动化测试时，同一改动必须在所属 package manifest 新增或更新 `scripts.test`。
 - 依赖真实 Pi、tmux、模型、凭据、GUI 或外部服务的测试只能注册为 `scripts.test:e2e`，不得并入 `scripts.test`。
 - package 没有默认测试时可以省略 `scripts.test`，不得添加无意义的占位脚本。
