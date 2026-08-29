@@ -1,5 +1,6 @@
 import { StringEnum } from "@earendil-works/pi-ai";
 import * as fs from "node:fs";
+import { resolve } from "node:path";
 import { type Static, Type } from "typebox";
 import {
 	DEFAULT_MAX_BYTES,
@@ -12,13 +13,12 @@ import type {
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import {
+	closeShell,
 	getShell,
 	listShells,
-	registerShell,
-	spawnShell,
+	startShell,
 	stateDir,
 	stopShell,
-	closeShell,
 	withRegistryLock,
 } from "./shells";
 
@@ -116,41 +116,28 @@ async function executeShellDaemon(
 					"shell_daemon: action=start requires a `command` parameter",
 				);
 			}
-			const cwd = params.cwd ?? ctx.cwd;
-			const spawned = spawnShell({
+			const cwd = params.cwd ? resolve(ctx.cwd, params.cwd) : ctx.cwd;
+			const { shell } = await startShell({
 				command: params.command,
 				cwd,
 				env: params.env,
 				name: params.name,
 			});
-			const record = {
-				id: spawned.id,
-				name: params.name,
-				command: params.command,
-				cwd,
-				pid: spawned.pid,
-				status: "running" as const,
-				startedAt: spawned.startedAt,
-				logFile: spawned.logFile,
-			};
-			// Serialize registry writes against concurrent tool calls (see
-			// withRegistryLock in shells.ts).
-			await withRegistryLock(() => registerShell(record));
 			const text = [
-				`Started shell ${spawned.id} (pid ${spawned.pid}, status running).`,
+				`Started shell ${shell.id} (pid ${shell.pid}, status running).`,
 				`Command: ${params.command}`,
 				`Cwd: ${cwd}`,
-				`Log: ${spawned.logFile}`,
+				`Log: ${shell.logFile}`,
 				`State dir: ${stateDir()}`,
 				"Check it with shell_daemon action=ps / status / logs; stop it with action=stop or close it with action=close when done.",
 			].join("\n");
 			return {
 				content: [{ type: "text", text }],
 				details: {
-					id: spawned.id,
-					pid: spawned.pid,
+					id: shell.id,
+					pid: shell.pid,
 					status: "running",
-					logFile: spawned.logFile,
+					logFile: shell.logFile,
 				},
 			};
 		}

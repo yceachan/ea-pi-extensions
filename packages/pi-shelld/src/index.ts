@@ -1,9 +1,14 @@
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type {
+	ExtensionAPI,
+	ExtensionContext,
+} from "@earendil-works/pi-coding-agent";
 import {
+	closeShell,
 	reapStaleState,
 	setExitNotifier,
 	setSessionFile,
 	shutdownShells,
+	startShell,
 	withRegistryLock,
 } from "./shells";
 import { registerShellDaemonTool } from "./tool";
@@ -12,6 +17,30 @@ import {
 	registerTuiMonitor,
 	syncShellFooterStatus,
 } from "./tui";
+
+export const SHELLD_SERVICE_CHANNEL = "pi-shelld:service:v1";
+
+export interface ShelldServiceV1 {
+	start(options: {
+		command: string;
+		cwd: string;
+		name?: string;
+	}): Promise<{
+		shellId: string;
+		logFile: string;
+		startedAt: number;
+		settled: Promise<{
+			code: number | null;
+			signal: NodeJS.Signals | null;
+			error?: string;
+		}>;
+	}>;
+	close(shellId: string): Promise<void>;
+}
+
+interface ShelldServiceRequest {
+	provide(service: ShelldServiceV1): void;
+}
 
 /**
  * pi-shelld extension entry.
@@ -34,8 +63,41 @@ import {
  * `session_start` seeds the ⭕shell footer entry, `session_shutdown` clears it.
  */
 export default function (pi: ExtensionAPI) {
+	let sessionContext: ExtensionContext | undefined;
+
 	registerShellDaemonTool(pi);
 	registerTuiMonitor(pi);
+
+	const service: ShelldServiceV1 = {
+		async start(options) {
+			if (!sessionContext) {
+				throw new Error("pi-shelld: no active session");
+			}
+			const { shell, settled } = await startShell({
+				...options,
+				notifyOnExit: false,
+			});
+			syncShellFooterStatus(sessionContext);
+			return {
+				shellId: shell.id,
+				logFile: shell.logFile,
+				startedAt: shell.startedAt,
+				settled,
+			};
+		},
+		async close(shellId) {
+			const shell = await withRegistryLock(() => closeShell(shellId));
+			if (shell?.status === "running") {
+				throw new Error(`pi-shelld: failed to close shell ${shellId}`);
+			}
+			if (sessionContext) syncShellFooterStatus(sessionContext);
+		},
+	};
+
+	pi.events.on(SHELLD_SERVICE_CHANNEL, (data) => {
+		const request = data as Partial<ShelldServiceRequest> | undefined;
+		if (typeof request?.provide === "function") request.provide(service);
+	});
 
 	// Exit notification (ADR-0001): when a shell becomes to close (natural
 	// exit or user stop), tell the agent to read the tail output and close
@@ -49,6 +111,7 @@ export default function (pi: ExtensionAPI) {
 	);
 
 	pi.on("session_start", async (_event, ctx) => {
+		sessionContext = ctx;
 		// Pin the session file FIRST: `stateDir()` derives the registry from
 		// it, so the reap below must read the session-scoped dir — pi does
 		// not expose PI_SESSION_FILE to the extension process, only to bash
@@ -68,5 +131,6 @@ export default function (pi: ExtensionAPI) {
 		// ADR-0001: nothing survives the session — sweep everything.
 		await withRegistryLock(() => shutdownShells());
 		clearShellFooterStatus(ctx);
+		sessionContext = undefined;
 	});
 }

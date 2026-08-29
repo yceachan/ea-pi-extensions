@@ -27,6 +27,14 @@ pi -e npm:@yceachan/pi-shelld             # try once without installing
 - Open the monitor with the ⭕shell footer entry: press the registered shortcut (see
   `docs/keybindings.md` in pi) or run `/shelld`.
 
+## Extension integration
+
+Separately loaded pi extensions can discover the versioned `pi-shelld:service:v1` service
+through `pi.events`. Its minimal `start`/`close` API lets integrations share the same shell
+registry, lifecycle lock, logs, and ⭕shell monitor without importing, depending on, or
+bundling pi-shelld. `start` also returns an in-memory `settled` promise for the spawned
+process; persistent shell status remains the two-state pid-derived model.
+
 ## Persistence and lifecycle
 
 A shell started with `action: "start"` is detached from the extension and keeps running after the tool call returns. This lets a server, watcher, or other long-running process continue while the agent works; later `ps`, `status`, and `logs` calls inspect the same shell. The registry and merged stdout/stderr log are stored under the current pi session's `*.shelld/` directory.

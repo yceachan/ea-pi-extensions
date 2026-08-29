@@ -67,6 +67,14 @@ export interface SpawnOptions {
 	cwd: string;
 	env?: NodeJS.ProcessEnv;
 	name?: string;
+	/** Suppress the generic exit notification when the caller owns completion. */
+	notifyOnExit?: boolean;
+}
+
+export interface ShellExit {
+	code: number | null;
+	signal: NodeJS.Signals | null;
+	error?: string;
 }
 
 export interface SpawnResult {
@@ -74,6 +82,7 @@ export interface SpawnResult {
 	pid: number;
 	logFile: string;
 	startedAt: number;
+	settled: Promise<ShellExit>;
 }
 
 export interface ReapResult {
@@ -297,33 +306,93 @@ export function getShell(id: string): ShellRecord | undefined {
  * extension's event loop open; it is kept in {@link childHandles} so the
  * `exit` event can trigger the agent notification.
  *
- * The caller composes the full {@link ShellRecord} (command, cwd, name,
- * status "running") and calls {@link registerShell} immediately.
+ * Prefer {@link startShell}, which also registers the process.
  */
-export function spawnShell(options: SpawnOptions): SpawnResult {
+export async function spawnShell(options: SpawnOptions): Promise<SpawnResult> {
 	const { command, cwd, env } = options;
 	const id = randomUUID();
 	fs.mkdirSync(logsDir(), { recursive: true });
 	const logFile = path.join(logsDir(), `${id}.log`);
 	const fd = fs.openSync(logFile, "a");
-	// `bash -c` (not a login shell): the environment is passed explicitly
-	// (process.env already carries the user's PATH, nvm etc.), and a login
-	// shell would source ~/.profile and pollute the log with its noise.
-	const child = spawn("bash", ["-c", command], {
-		cwd,
-		env: env ?? process.env,
-		detached: true,
-		stdio: ["ignore", fd, fd],
-		windowsHide: true,
-	});
-	if (!child.pid) {
+	let child: ChildProcess;
+	try {
+		// `bash -c` (not a login shell): the environment is passed explicitly
+		// (process.env already carries the user's PATH, nvm etc.), and a login
+		// shell would source ~/.profile and pollute the log with its noise.
+		child = spawn("bash", ["-c", command], {
+			cwd,
+			env: env ?? process.env,
+			detached: true,
+			stdio: ["ignore", fd, fd],
+			windowsHide: true,
+		});
+
+		let didSettle = false;
+		let settle!: (exit: ShellExit) => void;
+		const settled = new Promise<ShellExit>((resolve) => {
+			settle = (exit) => {
+				if (didSettle) return;
+				didSettle = true;
+				if (options.notifyOnExit === false) childHandles.delete(id);
+				else handleShellExit(id);
+				resolve(exit);
+			};
+		});
+		child.once("error", (error) =>
+			settle({ code: null, signal: null, error: error.message }),
+		);
+		child.once("exit", (code, signal) => settle({ code, signal }));
+
+		await new Promise<void>((resolveSpawn, rejectSpawn) => {
+			child.once("spawn", resolveSpawn);
+			child.once("error", rejectSpawn);
+		});
+		if (!child.pid) {
+			throw new Error(`shell_daemon: failed to spawn command: ${command}`);
+		}
 		fs.closeSync(fd);
-		throw new Error(`shell_daemon: failed to spawn command: ${command}`);
+		child.unref();
+		if (!didSettle) childHandles.set(id, child);
+		return { id, pid: child.pid, logFile, startedAt: Date.now(), settled };
+	} catch (error) {
+		try {
+			fs.closeSync(fd);
+		} catch {
+			// Already closed after a successful spawn.
+		}
+		try {
+			fs.unlinkSync(logFile);
+		} catch {
+			// The empty startup log may already be gone.
+		}
+		throw new Error(
+			`shell_daemon: failed to spawn command in ${cwd}: ${error instanceof Error ? error.message : String(error)}`,
+			{ cause: error },
+		);
 	}
-	child.unref();
-	childHandles.set(id, child);
-	child.on("exit", () => handleShellExit(id));
-	return { id, pid: child.pid, logFile, startedAt: Date.now() };
+}
+
+/** Spawn and register one shell through the shared lifecycle boundary. */
+export async function startShell(options: SpawnOptions): Promise<{
+	shell: ShellRecord;
+	settled: Promise<ShellExit>;
+}> {
+	const spawned = await spawnShell({
+		...options,
+		env: options.env ? { ...process.env, ...options.env } : undefined,
+	});
+	const shell: ShellRecord = {
+		id: spawned.id,
+		name: options.name,
+		command: options.command,
+		cwd: options.cwd,
+		pid: spawned.pid,
+		status: "running",
+		startedAt: spawned.startedAt,
+		logFile: spawned.logFile,
+	};
+	await withRegistryLock(() => registerShell(shell));
+	return { shell, settled: spawned.settled };
 }
 
 // ---------------------------------------------------------------------------
