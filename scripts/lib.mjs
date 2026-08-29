@@ -287,10 +287,12 @@ export function syncLockfileWorkspaceVersions(lockPath, entries) {
 // Raw registry document with reachability info, or null only on hard failure.
 async function fetchRegistry(name) {
 	try {
-		const res = await fetch(
-			`https://registry.npmjs.org/${name.replace("/", "%2F")}`,
-			{ signal: AbortSignal.timeout(REGISTRY_TIMEOUT_MS) },
-		);
+		const registry = (
+			process.env.NPM_CONFIG_REGISTRY ?? "https://registry.npmjs.org"
+		).replace(/\/+$/, "");
+		const res = await fetch(`${registry}/${name.replace("/", "%2F")}`, {
+			signal: AbortSignal.timeout(REGISTRY_TIMEOUT_MS),
+		});
 		if (res.status === 404) return { kind: "unknown" };
 		if (!res.ok) return { kind: "unreachable" };
 		return { kind: "ok", doc: await res.json() };
@@ -334,4 +336,55 @@ export function runCapture(cmd, cwd) {
 
 export function gitDirty(cwd) {
 	return runCapture("git status --porcelain", cwd).trim();
+}
+
+// Pure state reducer for `mono-release --initial`. Tag states are
+// "absent" | "head" | "other"; registry is the registryBaseline result.
+// The caller performs commands only after this function has selected a safe,
+// resumable action.
+export function initialReleaseDecision({
+	registryStatus,
+	registryVersion,
+	manifestVersion,
+	localTag,
+	remoteTag,
+}) {
+	if (registryStatus === "unreachable") {
+		return {
+			error: "registry unreachable; refusing to infer an initial release",
+		};
+	}
+	if (localTag === "other")
+		return { error: "local tag points to another commit" };
+	if (remoteTag === "other")
+		return { error: "remote tag points to another commit" };
+
+	if (registryStatus === "unknown") {
+		if (remoteTag !== "absent") {
+			return {
+				error: "remote tag already exists while the registry version is absent",
+			};
+		}
+		return {
+			createTag: localTag === "absent",
+			publish: true,
+			push: true,
+			done: false,
+		};
+	}
+
+	if (registryStatus !== "ok" || registryVersion !== manifestVersion) {
+		return {
+			error: `registry baseline ${registryVersion ?? "unknown"} differs from manifest ${manifestVersion}`,
+		};
+	}
+	if (localTag === "absent") {
+		return {
+			error: "current version is published but no local tag anchors it to HEAD",
+		};
+	}
+	if (remoteTag === "head") {
+		return { createTag: false, publish: false, push: false, done: true };
+	}
+	return { createTag: false, publish: false, push: true, done: false };
 }

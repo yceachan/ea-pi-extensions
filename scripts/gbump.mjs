@@ -17,23 +17,50 @@ import { resolvePackageScope } from "./lib.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-const HELP = `gbump — 手工发版一键入口（等价 mono-release 完整守卫 + 发版仪式）
+const colorsAllowed = process.env.NO_COLOR === undefined;
+const forceColor = process.env.FORCE_COLOR === "1";
+const useHelpColor = colorsAllowed && (process.stdout.isTTY || forceColor);
+const useErrorColor = colorsAllowed && (process.stderr.isTTY || forceColor);
+const paint = (code, text) =>
+	useHelpColor ? `\u001B[${code}m${text}\u001B[0m` : text;
+const heading = (text) => paint("1;32", text);
+const option = (text) => paint("1;32", text);
+const value = (text) => paint("32", text);
+const command = (text) => paint("32", text);
+const errorText = (text) =>
+	useErrorColor ? `\u001B[31m${text}\u001B[0m` : text;
+const warningText = (text) =>
+	useErrorColor ? `\u001B[33m${text}\u001B[0m` : text;
 
-用法:
-  ./gbump -p <package> [--patch | --minor | --major | --set-ver <X.Y.Z>] [--dry-run] [-y]
-  ./gbump --help
+const HELP = `${heading("gbump")} — package 发布工具
 
-说明:
-  - 薄壳: 把 gbump 参数翻译为 mono-release 的位置参数后直接委托
-    scripts/mono-release.mjs；守卫与发版仪式全在 mono-release 一份实现
-  - -p 支持模糊匹配（与 gcm -p 共享 scripts/lib.mjs 的 resolvePackageScope）:
-    仅匹配 packages/* 包名（无跨切面词表；二级小工具名映射到母包，
-    如 cite-wslpath → pi-gadget），TTY 下回车确认首选 /
-    输入序号或完整包名；非交互下唯一候选需 -y 接受，多候选必须用完整包名
-  - 守卫（mono-release）: 干净工作区 → README 包清单同步（./sync-readme --check）→
-    逐包（本地版本 == registry 基线 → 自上个逐包 tag 有实质变更（无基线仅告警）→
-    changelog/<pkg>/v<ver>/log.md 已存在且含实质条目 → tag 未在本地存在）
-  - changelog 骨架由 ./gcm -c 创建（见 scripts/gcm.mjs）
+${heading("用法")}
+  ${command("./gbump")} ${option("-p")} ${value("<package>")} (${option("--patch | --minor | --major | --set-ver")} ${value("<X.Y.Z>")}) [${option("--dry-run")}]
+  ${command("./gbump")} ${option("-p")} ${value("<package>")} ${option("--initial")} [${option("--dry-run | --yes")}]
+
+${heading("示例")}
+  ${command("./gbump -p pi-gadget --patch --dry-run")}
+  ${command("./gbump -p pi-gadget --set-ver 0.5.0")}
+  ${command("./gbump -p pi-new --initial --dry-run")}
+  ${command("./gbump -p pi-new --initial")}
+
+${heading("参数")}
+  ${option("-p")} ${value("<package>")}          package 名；支持模糊匹配
+  ${option("--patch")}               patch 版本
+  ${option("--minor")}               minor 版本
+  ${option("--major")}               major 版本
+  ${option("--set-ver")} ${value("<X.Y.Z>")}    指定版本
+  ${option("--initial")}             发布 manifest 当前版本
+  ${option("--dry-run")}             运行检查，不写入
+  ${option("-y, --yes")}             接受唯一模糊匹配；授权非 TTY initial 发布
+  ${option("-h, --help")}            显示帮助
+
+${heading("规则")}
+  - regular 发布要求 registry 基线；新 package 使用 ${option("--initial")}。
+  - 发布要求 clean worktree 和有效 changelog。
+  - initial 在 TTY 输入完整 tag；非 TTY 使用 ${option("--yes")}。
+
+${heading("退出码")}  ${value("0")} 成功  ${value("1")} 失败
 `;
 
 const args = process.argv.slice(2);
@@ -48,16 +75,19 @@ if (args.length === 0 || helpOnly) {
 }
 
 function fail(msg) {
-	console.error(`✗ ${msg}`);
-	console.error("  Run ./gbump --help for usage.");
+	process.stderr.write(`${errorText(`✗ ${msg}\n  ./gbump --help`)}\n`);
 	process.exit(1);
+}
+
+function warn(msg) {
+	process.stderr.write(`${warningText(`⚠ ${msg}`)}\n`);
 }
 
 // ── gbump flags → mono-release positional args ────────────────────────────
 let pkg = null;
 let dryRun = false;
 let yes = false;
-let mode = null; // "patch" | "minor" | "major" | "set-ver"
+let mode = null; // "patch" | "minor" | "major" | "set-ver" | "initial"
 let setVer = null;
 
 for (let i = 0; i < args.length; i++) {
@@ -70,7 +100,12 @@ for (let i = 0; i < args.length; i++) {
 		dryRun = true;
 	} else if (a === "-y" || a === "--yes") {
 		yes = true;
-	} else if (a === "--patch" || a === "--minor" || a === "--major") {
+	} else if (
+		a === "--patch" ||
+		a === "--minor" ||
+		a === "--major" ||
+		a === "--initial"
+	) {
 		if (mode !== null) fail(`conflicting version flags (already ${mode})`);
 		mode = a.slice(2);
 	} else if (a === "--set-ver") {
@@ -85,16 +120,24 @@ for (let i = 0; i < args.length; i++) {
 }
 if (pkg === null) fail("-p <package> is required");
 if (mode === null)
-	fail("missing version flag: --patch | --minor | --major | --set-ver <X.Y.Z>");
+	fail(
+		"missing release mode: --patch | --minor | --major | --set-ver <X.Y.Z> | --initial",
+	);
 
 // -p 模糊解析（与 gcm -p 同一份实现）→ 解析出完整包名后再委托 mono-release；
 // mono-release 保持精确匹配（批式位置参数 CLI，模糊化会让多包解析歧义）。
-pkg = await resolvePackageScope(pkg, { root, yes, fail });
+pkg = await resolvePackageScope(pkg, { root, yes, fail, warn });
+
+let releaseArgs;
+if (mode === "set-ver") releaseArgs = ["--set-ver", setVer];
+else if (mode === "initial") releaseArgs = ["--initial"];
+else releaseArgs = [mode];
 
 const mArgs = [
 	pkg,
-	...(mode === "set-ver" ? ["--set-ver", setVer] : [mode]),
+	...releaseArgs,
 	...(dryRun ? ["--dry-run"] : []),
+	...(yes && mode === "initial" ? ["--yes"] : []),
 ];
 const res = spawnSync("bun", ["scripts/mono-release.mjs", ...mArgs], {
 	cwd: root,

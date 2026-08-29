@@ -2,7 +2,7 @@
 title: ea-pi-extensions Git 提交规范
 tags: [git, commit, conventional-commits, monorepo, release, changelog]
 desc: 提交信息格式（type/scope 词表）、提交卫生、release 提交与 changelog 纪律、分支与 PR 约定
-update: 2026-08-16
+update: 2026-08-30
 ---
 
 # ea-pi-extensions Git 提交规范
@@ -37,10 +37,12 @@ type(scope): subject
 ### scope 词表
 
 - **包名（单一包变更必填）**：see `packages/*`
-- **跨切面**：`scripts`（工具脚本）、`ci`（workflow）、`docs`（文档）、`release`（发版流程）、`changelog`（发布说明）、`root`（根 manifest / workspace 配置）
+- **跨切面**：`scripts`（工具脚本）、`skills`（`mono/skills` 技能迭代）、`ci`（workflow）、`docs`（文档）、`release`（发版流程）、`changelog`（发布说明）、`root`（根 manifest / workspace 配置）
 
 ### subject 规则
+
 - 说清**改了什么**，不说"改代码"：`fix(pi-shelld): drain zombie shells on session end` ✓，`fix stuff` ✗
+- subject 语言不限；仍须满足非空、≤100 字符和无 emoji
 - 涉及 issue/PR 时以 `(#NNNN)` 结尾（外部 PR 场景）
 
 ### body 规则
@@ -49,7 +51,10 @@ type(scope): subject
 
 ## 提交入口（gcm）
 
-see `./gcm --help`
+- staged 文件是提交授权边界；dirty worktree 默认隔离，只有显式 `--allow-dirty` 才保留其余现场继续提交
+- unmerged entries 始终阻断提交，`--allow-dirty` 不绕过冲突守卫
+
+参数、隔离命令与失败后的下一步 see `./gcm --help`。
 
 
 ## Changelog
@@ -67,6 +72,7 @@ changelog/
 - 推荐工作流（一次提交）: feat 开发完成后先 `./gcm -c -p <pkg> --[minor | patch | major]` 创建骨架 → 填写
   条目 → 代码与 `changelog/<pkg>/vX.Y.Z/log.md` 一并 `git add` →
   `./gcm -t <type> -p <pkg> -m "..."` 一次提交
+- 新包首版 changelog 的版本可等于 manifest 当前版本；低于 manifest 或不高于已发布 registry 基线仍拒绝
 - `mono-release.mjs` 硬性要求 `changelog/<pkg>/v<ver>/log.md` 已存在且含实质 `-` 条目
 
 ```text

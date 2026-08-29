@@ -3,7 +3,7 @@
 # gbump / gcm 的 zsh 参数补全。
 #
 # -p 的包名候选动态扫描 packages/*/package.json 目录名；gcm 分支另附跨切面
-# 词表 scripts/ci/docs/release/changelog/root（与 scripts/gcm.mjs 的
+# 词表 scripts/skills/ci/docs/release/changelog/root（与 scripts/gcm.mjs 的
 # CROSS_SCOPES 保持一致，gbump 只认 packages/* 不追加）。仓库根由本文件
 # 在 fpath 中的位置推导（scripts/completions/_gbump 的上级 ×3），不依赖
 # 调用时 cwd，也不依赖 functions_source（zsh 5.8 的 autoload 路径下为空）。
@@ -26,7 +26,7 @@ _gbump() {
 	# gcm -p 额外接受跨切面词表；但 -c changelog 骨架模式要求精确包名
 	# （gcm.mjs changelogMode 直接查 packageScopes），此时不附跨切面词。
 	if [[ $service == gcm ]] && (( ! ${words[(I)(-c|--changelog)]} )); then
-		pkgs+=(scripts ci docs release changelog root)
+		pkgs+=(scripts skills ci docs release changelog root)
 	fi
 
 	local context state line ret=1
@@ -34,12 +34,13 @@ _gbump() {
 
 	if [[ $service == gbump ]]; then
 		flags=(
-			'(--minor --major --set-ver)--patch[bump patch version]'
-			'(--patch --major --set-ver)--minor[bump minor version]'
-			'(--patch --minor --set-ver)--major[bump major version]'
-			'(--patch --minor --major)--set-ver[set explicit target version (X.Y.Z)]:version:_message'
+			'(--minor --major --set-ver --initial)--patch[bump patch version]'
+			'(--patch --major --set-ver --initial)--minor[bump minor version]'
+			'(--patch --minor --set-ver --initial)--major[bump major version]'
+			'(--patch --minor --major --initial)--set-ver[set explicit target version (X.Y.Z)]:version:_message'
+			'(--patch --minor --major --set-ver)--initial[publish the manifest current version for the first time]'
 			'--dry-run[validate all guards and print the plan without writing]'
-			'(-y --yes)'{-y,--yes}'[accept the unique fuzzy -p match without confirmation (non-TTY)]'
+			'(-y --yes)'{-y,--yes}'[accept a unique fuzzy scope and authorize non-TTY initial publish]'
 			# gbump 只认 -p，不接受 --scope。spec 必须恒常存在，
 			# _arguments 才能识别 -p 带参数并在其参数位分发 ->pkg。
 			'-p[package scope (fuzzy match supported)]:package scope:->pkg'
@@ -51,6 +52,7 @@ _gbump() {
 			'(-b --body)'{-b,--body}'[commit body]:body:_message'
 			'--print[print the composed message only, no git]'
 			'--dry[run full validation without committing]'
+			'--allow-dirty[commit staged files while retaining unstaged and untracked changes]'
 			'(-c --changelog)'{-c,--changelog}'[create a changelog skeleton]'
 			'--list[list all packages@versions]'
 			'(--minor --major --set-ver)--patch[bump patch version]'

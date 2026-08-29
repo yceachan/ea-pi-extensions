@@ -12,6 +12,7 @@
     "version:sync": "bun scripts/mono-tagcheck.mjs --sync",
     "version:reset": "bun scripts/mono-tagcheck.mjs --reset",
     "typecheck": "bun run --filter '*' typecheck",
+    "test:version-control": "bun test scripts/tests/version-control-workflow.test.mjs",
     "gbump": "./gbump"
   },
   "private": true

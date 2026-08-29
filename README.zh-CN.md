@@ -55,7 +55,6 @@ pi install npm:@yceachan/pi-vision-helper
 ├── docs/                     # 提交/发版规范 + tag 回退与 CI 容灾 runbook
 │   ├── git提交规范.md
 │   ├── 发行版本控制策略.md
-│   └── tag回退与CI容灾.md
 ├── changelog/
 │   └── <pkg>/vX.Y.Z/log.md  # 逐包发布说明（手工，docs(changelog):）
 └── .github/workflows/
