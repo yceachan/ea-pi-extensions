@@ -4,10 +4,10 @@
 # the agent's bash cwd after a switch (no cd needed), and round-trips.
 #
 # Requires: tmux, a configured default model in ~/.pi/agent/settings.json.
-# Run from the repo root:  ./e2e-test.sh
+# Run: ./e2e-test.sh  (cwd-independent; registered as scripts.test:e2e)
 set -u
 ROOT=/tmp/pi-switch-cwd-e2e
-EXT="$PWD/index.ts"
+EXT="$(cd -- "$(dirname -- "$0")" && pwd)/index.ts"
 SES=cwdtest
 mkdir -p $ROOT/home $ROOT/proj
 tmux kill-session -t $SES 2>/dev/null
