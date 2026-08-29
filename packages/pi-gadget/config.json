@@ -1,0 +1,11 @@
+{
+  "pi-clear": {
+    "status": "enabled"
+  },
+  "pi-exit": {
+    "status": "enabled"
+  },
+  "pi-cite-wslpath": {
+    "status": "enabled"
+  }
+}

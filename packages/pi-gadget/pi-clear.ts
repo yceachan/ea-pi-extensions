@@ -22,8 +22,11 @@
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { isGadgetEnabled } from "./config.ts";
 
 export default function (pi: ExtensionAPI) {
+	if (!isGadgetEnabled("pi-clear")) return;
+
 	pi.registerCommand("clear", {
 		description: "/clear [name] : 命名并归档对话，然后清空并开始全新 session",
 		handler: async (args, ctx) => {
@@ -34,10 +37,7 @@ export default function (pi: ExtensionAPI) {
 			// A session with no entries has nothing to archive; switching anyway
 			// would just churn out empty session files.
 			if (ctx.sessionManager.getEntries().length === 0) {
-				ctx.ui.notify(
-					"Nothing to clear — the session is already empty.",
-					"info",
-				);
+				ctx.ui.notify("Nothing to clear — the session is already empty.", "info");
 				return;
 			}
 

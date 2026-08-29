@@ -52,6 +52,7 @@ import { homedir } from "node:os";
 import { isAbsolute, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Type } from "typebox";
+import { isGadgetEnabled } from "./config.ts";
 
 /** `/mnt/<drive>[/rest]` — the WSL auto-mount of a Windows drive. */
 const WSL_MNT_RE = /^\/mnt\/([a-z])(?:\/(.*))?$/i;
@@ -363,6 +364,8 @@ export function findDeliveredBrokenLinks(
 
 // pi-lens-ignore: high-fan-out
 export default function (pi: ExtensionAPI) {
+	if (!isGadgetEnabled("pi-cite-wslpath")) return;
+
 	pi.registerTool({
 		name: "pi-cite-wslpath",
 		label: "Cite WSL Path",

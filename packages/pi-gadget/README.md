@@ -44,6 +44,38 @@ regardless of terminal width. Quoted examples are skipped (code spans, fenced co
 blocks, and `...` ellipsis forms), so citing the guideline text itself does not trip
 the check.
 
+## Configuration
+
+Each gadget is enabled by default. Disable one in the user or project config:
+
+```json
+{
+  "pi-cite-wslpath": { "status": "disabled" }
+}
+```
+
+Configuration layers are merged from low to high priority:
+
+```text
+<package>/config.json
+$PI_AGENT_DIR/pi-gadget/config.json      (or $PI_CODING_AGENT_DIR; default: ~/.pi/agent/pi-gadget/config.json)
+$CWD/.pi/pi-gadget/config.json
+```
+
+The keys are `pi-clear`, `pi-exit`, and `pi-cite-wslpath`. A project setting overrides the user setting for the same key; omitted keys keep the lower-layer value. Changes take effect after `/reload`.
+
+Use `/gadgets` to manage the current project's overrides:
+
+```text
+/gadgets list
+/gadgets enable pi-cite-wslpath
+/gadgets disable pi-cite-wslpath
+/gadgets enable --global pi-cite-wslpath
+/gadgets disable --global pi-cite-wslpath
+```
+
+`enable` and `disable` update `$CWD/.pi/pi-gadget/config.json` and reload the extensions. With `--global`, the command updates the agent directory config; when the current project already has a config file, it updates that file too so the project override does not mask the global setting. If the project config is absent, it is left absent. The management command remains available while individual gadgets are disabled.
+
 ## License
 
 MIT

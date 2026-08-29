@@ -1,6 +1,7 @@
 {
   "name": "@yceachan/pi-gadget",
   "version": "0.2.3",
+  "type": "module",
   "description": "pi extension collection: /clear session archiving, /exit, and WSL-path links for Windows Terminal",
   "keywords": [
     "pi-package",
@@ -24,16 +25,23 @@
     "pi-clear.ts",
     "pi-exit.ts",
     "pi-cite-wslpath.ts",
+    "pi-gadgets.ts",
+    "config.ts",
+    "config.json",
     "README.md"
   ],
   "publishConfig": {
     "access": "public"
   },
+  "scripts": {
+    "test": "bun test test/"
+  },
   "pi": {
     "extensions": [
       "./pi-clear.ts",
       "./pi-exit.ts",
-      "./pi-cite-wslpath.ts"
+      "./pi-cite-wslpath.ts",
+      "./pi-gadgets.ts"
     ]
   },
   "peerDependencies": {

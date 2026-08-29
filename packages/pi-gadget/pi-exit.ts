@@ -22,6 +22,7 @@
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import { isGadgetEnabled } from "./config.ts";
 
 /** Commands that trigger a clean shutdown when sent as a prompt. */
 const EXIT_TEXT_PATTERNS: RegExp[] = [
@@ -41,6 +42,9 @@ function isExitText(text: string): boolean {
 }
 
 export default function (pi: ExtensionAPI) {
+	// Keep all pi-exit surfaces behind one config switch.
+	if (!isGadgetEnabled("pi-exit")) return;
+
 	// 1. `/exit` as a real command (dispatched before the input event).
 	pi.registerCommand("exit", {
 		description: "Exit pi cleanly (aliases: /quit, :q, :q!, :wq, :wq!)",
