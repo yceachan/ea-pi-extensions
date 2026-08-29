@@ -1,7 +1,7 @@
 {
   "name": "@yceachan/pi-vision-helper",
   "version": "0.1.1",
-  "description": "pi extension + skill: visual understanding via a configurable vision model (pi-registry reuse or custom responses API; default gpt-5.6-luna) when the main model cannot see images — pure TypeScript, single runtime",
+  "description": "pi extension + skill: vision assistance through pi-registry or a custom Responses API for models without image input",
   "type": "module",
   "keywords": [
     "pi-package",

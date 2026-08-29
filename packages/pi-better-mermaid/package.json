@@ -1,7 +1,7 @@
 {
   "name": "@yceachan/pi-better-mermaid",
   "version": "0.1.3",
-  "description": "pi extension + skill: the writing-mermaid rules bundled as the better-mermaid skill, gated by an mmdc validation tool — deliver a diagram, get structured errors, fix, repeat (3 strikes)",
+  "description": "pi extension + skill: Mermaid guidance with mmdc validation for Typora rendering and syntax-error retries",
   "keywords": [
     "pi-package",
     "pi-extension",

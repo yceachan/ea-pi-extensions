@@ -1,7 +1,7 @@
 {
   "name": "@yceachan/pi-switch-cwd",
   "version": "0.1.2",
-  "description": "pi extension: /cwd — switch the session working directory (session file moves with it)",
+  "description": "pi extension: /cwd switches the session working directory",
   "type": "module",
   "files": [
     "index.ts",

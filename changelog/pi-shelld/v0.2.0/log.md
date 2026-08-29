@@ -1,7 +1,7 @@
 # pi-shelld v0.2.0
 
 ## feat
-provide shelld-service discovery so that others extensions could better use this.
+- provide shelld-service discovery so that others extensions could better use this.
 ## fix
 
 <!-- 骨架：按 feat / fix / chore / ci / docs 分组填写 "- " 条目 -->

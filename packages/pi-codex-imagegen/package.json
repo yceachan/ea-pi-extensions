@@ -1,7 +1,7 @@
 {
   "name": "@yceachan/pi-codex-imagegen",
   "version": "0.1.0",
-  "description": "pi extension: background Codex imagegen with fixed staging-file delivery through a separately loaded pi-shelld",
+  "description": "pi extension: generate images with the local Codex CLI and monitor them through a separately loaded pi-shelld",
   "type": "module",
   "keywords": [
     "pi-package",

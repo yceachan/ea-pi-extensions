@@ -2,21 +2,21 @@
 
 **English | [简体中文](README.zh-CN.md)**
 
-A [bun](https://bun.sh) workspace monorepo for [yceachan](https://github.com/yceachan)'s pi-extensions. Each package carries its own semver version; a release bumps only the packages it names and each package tag (`<pkg>@<ver>`) is its own publish instruction.
+A [bun](https://bun.sh) workspace monorepo for [yceachan](https://github.com/yceachan)'s pi extensions. Each package has its own version and is released with its own `<pkg>@<ver>` tag.
 
 ## Packages
 
 | Package | Description | Gallery |
 | --- | --- | --- |
-| [`@yceachan/pi-better-btw`](packages/pi-better-btw) | Fork of nicobailon/pi-side-chat (https://github.com/nicobailon/pi-side-chat) — /btw (alias /side) forks the current conversation into a non-capturing side-chat overlay: read-only lane with lane enforcement, prompt pack, shared-prefix caching, mouse select/copy — while the main agent keeps working | [pi.dev](https://pi.dev/packages/@yceachan/pi-better-btw) |
-| [`@yceachan/pi-better-mermaid`](packages/pi-better-mermaid) | `better-mermaid` — bundles the writing-mermaid rules as a skill, gates the agent-delivered diagram with mmdc validation, loops on structured errors (3 strikes) · [capability evals](packages/pi-better-mermaid/skills/better-mermaid/evals/README.md) | [pi.dev](https://pi.dev/packages/@yceachan/pi-better-mermaid) |
-| [`@yceachan/pi-codex-imagegen`](packages/pi-codex-imagegen) | locally authenticated Codex `imagegen` with fixed staging-file delivery and separately loaded pi-shelld live monitoring | [pi.dev](https://pi.dev/packages/@yceachan/pi-codex-imagegen) |
-| [`@yceachan/pi-gadget`](packages/pi-gadget) | single-file utilities: `/clear` session archiving, `/exit`, `pi-cite-wslpath` (WSL path → Windows-Terminal-openable hyperlink, batch `paths[]`, agent_end leak force-check) | [pi.dev](https://pi.dev/packages/@yceachan/pi-gadget) |
-| [`@yceachan/pi-shelld`](packages/pi-shelld) | `shell_daemon` tool + ⭕shell TUI monitor for session-scoped persistent background shells (servers, watchers) with live logs and explicit stop/close lifecycle | [pi.dev](https://pi.dev/packages/@yceachan/pi-shelld) |
+| [`@yceachan/pi-better-btw`](packages/pi-better-btw) | `/btw`, a fork of [nicobailon/pi-side-chat](https://github.com/nicobailon/pi-side-chat); opens an overlay for main-thread side questions, shares the prompt prefix, and uses a side-lane guard to keep the agent from interfering with main work | [pi.dev](https://pi.dev/packages/@yceachan/pi-better-btw) |
+| [`@yceachan/pi-better-mermaid`](packages/pi-better-mermaid) | `better-mermaid` — packages Mermaid guidance as a skill, checks Typora rendering constraints with `mmdc`, and retries syntax errors | [pi.dev](https://pi.dev/packages/@yceachan/pi-better-mermaid) |
+| [`@yceachan/pi-codex-imagegen`](packages/pi-codex-imagegen) | Uses the local Codex login to generate images with `imagegen`; a separately loaded `pi-shelld` shows live logs, status, and runtime | [pi.dev](https://pi.dev/packages/@yceachan/pi-codex-imagegen) |
+| [`@yceachan/pi-gadget`](packages/pi-gadget) | Single-file utilities: `/clear` archives the session, `/exit` quits pi, and `pi-cite-wslpath` converts WSL paths into clickable Windows Terminal links | [pi.dev](https://pi.dev/packages/@yceachan/pi-gadget) |
+| [`@yceachan/pi-shelld`](packages/pi-shelld) | `shell_daemon` tool + ⭕shell TUI monitor for session-scoped background shells (servers, watchers); other extensions can discover and reuse its service through `pi.events` | [pi.dev](https://pi.dev/packages/@yceachan/pi-shelld) |
 | [`@yceachan/pi-switch-cwd`](packages/pi-switch-cwd) | `/cwd` — switch the session working directory | [pi.dev](https://pi.dev/packages/@yceachan/pi-switch-cwd) |
-| [`@yceachan/pi-vision-helper`](packages/pi-vision-helper) | config-driven vision delegation (pi-registry reuse or custom responses API) when the main model has no vision — pure TypeScript, single runtime | [pi.dev](https://pi.dev/packages/@yceachan/pi-vision-helper) |
+| [`@yceachan/pi-vision-helper`](packages/pi-vision-helper) | Vision helper for models without image input; uses pi-registry or a custom Responses API | [pi.dev](https://pi.dev/packages/@yceachan/pi-vision-helper) |
 
-## Structure
+## Layout
 
 ```text
 .
@@ -30,7 +30,7 @@ A [bun](https://bun.sh) workspace monorepo for [yceachan](https://github.com/yce
 │   └── pi-vision-helper/
 ├── gcm                      # bash entry → scripts/gcm.mjs (bun run gcm)
 ├── gbump                    # bash entry → scripts/gbump.mjs (manual release one-click)
-├── sync-readme              # bash entry → scripts/sync-readme.mjs (README ## Packages table rebuild)
+├── sync-readme              # bash entry → scripts/sync-readme.mjs (README package table + install block)
 ├── scripts/
 │   ├── lib.mjs              # shared: registry queries, fuzzy scope resolution, ask()
 │   ├── gcm.mjs              # manual commit entry (type/scope validation, fuzzy scope pick)
@@ -65,57 +65,12 @@ pi install npm:@yceachan/pi-vision-helper
 ## Development
 
 ```bash
-bun install             # install the workspace (single root bun.lock)
+bun install             # install the workspace
 bun run typecheck       # typecheck all packages
-bun run gcm             # manual commit helper (see docs/git提交规范.md)
+./gcm --help            # view the commit helper
+ls docs/*               # view repository docs
 ```
-
-Manual commits follow the convention in [`docs/git提交规范.md`](docs/git提交规范.md); the `gcm` entry
-composes and validates `type(scope): subject` and commits only what you staged:
-
-```bash
-git add packages/pi-shelld/src/…
-bun run gcm -- -t fix -p shelld -m "drain zombie shells on session end"
-```
-
-No build step — pi loads TypeScript directly via jiti. Edit sources and `/reload` in pi.
-
-## Release
-
-Per-package versioning, tag-as-publish-instruction:
-
-```bash
-./gbump -p pi-gadget --minor                   # one-click: pre-flight checks then release
-./gbump -p pi-gadget --set-ver 0.5.0           # explicit target version
-./gcm -c -p pi-gadget --minor                  # scaffold the changelog, prints path + commit hint
-bun run mono-release -- pi-gadget minor pi-shelld patch  # ceremony directly (same built-in guards as gbump)
-```
-
-`./gbump` is the one-click manual release entry: a thin wrapper that delegates to
-`scripts/mono-release.mjs`, which enforces a clean working tree, that the package's
-local version equals its registry baseline, that `changelog/<pkg>/vX.Y.Z/log.md`
-exists with real entries, and that the package actually changed since its last
-package tag — then bumps only the named packages, syncs `bun.lock`'s workspace
-version fields, commits `release: pi-gadget@0.3.0`,
-tags each `pi-gadget@0.3.0`, and pushes. Write release notes first:
-`./gcm -c -p <pkg> --minor` scaffolds `changelog/<pkg>/vX.Y.Z/log.md`, which you fill
-in and commit as `docs(changelog): <pkg> vX.Y.Z`.
-The `publish.yml` workflow (trigger: tags matching `*@*`) parses the tag, verifies
-`packages/<pkg>/package.json` matches the tag version, and publishes exactly that
-package with `npm publish --provenance` (OIDC trusted publishing). A `workflow_dispatch`
-dry-run entry runs the same validation without publishing — use it to test pipeline changes.
-
-`bun run mono-tagcheck` shows each package's local version against its registry baseline;
-`bun run mono-tagcheck -- --sync` aligns any package that lags behind, automatically
-refreshes the workspace with `bun install` (so `bun.lock` follows), and reports the
-changed files and dirty-tree state — it only ever adjusts version numbers in manifests,
-never commits/tags/pushes. After a failed (zero-publish) release,
-`bun run mono-tagcheck -- --reset` rewrites an ahead package back to its published
-baseline; the runbook (`docs/tag回退与CI容灾.md`) walks the full recovery.
-
-Prerequisite (one-time): configure npm [Trusted Publishers](https://docs.npmjs.com/trusted-publishers/)
-for each package — repository `yceachan/ea-pi-extensions`, workflow `publish.yml`.
 
 ## License
 
-MIT
+MIT copyright @2026 yceachan
