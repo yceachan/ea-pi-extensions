@@ -1,6 +1,6 @@
 {
   "name": "@yceachan/pi-shelld",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "pi extension: session-scoped background shells with shell_daemon, a TUI monitor, and pi.events service discovery",
   "keywords": [
     "pi-package",

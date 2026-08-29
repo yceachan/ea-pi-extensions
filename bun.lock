@@ -65,7 +65,7 @@
     },
     "packages/pi-shelld": {
       "name": "@yceachan/pi-shelld",
-      "version": "0.1.1",
+      "version": "0.2.0",
       "devDependencies": {
         "@earendil-works/pi-ai": "^0.84.2",
         "@earendil-works/pi-coding-agent": "^0.84.2",
