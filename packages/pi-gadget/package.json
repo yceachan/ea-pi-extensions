@@ -1,6 +1,6 @@
 {
   "name": "@yceachan/pi-gadget",
-  "version": "0.2.3",
+  "version": "0.3.0",
   "type": "module",
   "description": "pi extension collection: /clear session archiving, /exit, and WSL-path links for Windows Terminal",
   "keywords": [
