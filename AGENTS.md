@@ -10,6 +10,23 @@
 - 根 manifest 和 CI workflow 不得为单个 package 添加测试路径或专属命令。
 - 本地和 CI 的默认全量测试入口统一为 `bun run test`。
 
+## meta docs
+
+```
+//$PWD = .agents/issues/
+|-open/
+| |- <xx-type-issue.md>  # original bug-report | feat-request
+| |- <xx-issue>/    # discussion workspace about raw issue
+|              |- Research.md
+|              |- ADR.md
+|              |- route.md            
+|-closed/xx
+        |- xx-issue : mv original issue to here.
+        |- close.md : writes how cover this issue,relates to commit/PR.
+
+
+```
+
 ## 主线提交纪律
 
 提交规范见[docs/git提交规范.md](docs/git提交规范.md)，本文补充agent红线。
