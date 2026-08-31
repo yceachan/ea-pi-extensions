@@ -1,0 +1,9 @@
+{
+  "ok": true,
+  "data": {
+    "leaseId": "lease-fixture",
+    "rootTargetId": "root-fixture",
+    "ownedTargetIds": ["root-fixture"],
+    "mode": "headless"
+  }
+}

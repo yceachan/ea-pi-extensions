@@ -15,6 +15,7 @@ A [bun](https://bun.sh) workspace monorepo for [yceachan](https://github.com/yce
 | [`@yceachan/pi-shelld`](packages/pi-shelld) | `shell_daemon` tool + ⭕shell TUI monitor for session-scoped background shells (servers, watchers); other extensions can discover and reuse its service through `pi.events` | [pi.dev](https://pi.dev/packages/@yceachan/pi-shelld) |
 | [`@yceachan/pi-switch-cwd`](packages/pi-switch-cwd) | `/cwd` — switch the session working directory | [pi.dev](https://pi.dev/packages/@yceachan/pi-switch-cwd) |
 | [`@yceachan/pi-vision-helper`](packages/pi-vision-helper) | Vision helper for models without image input; uses pi-registry or a custom Responses API | [pi.dev](https://pi.dev/packages/@yceachan/pi-vision-helper) |
+| [`@yceachan/pi-wsl-browser`](packages/pi-wsl-browser) | Session-scoped WSL Windows Edge/Chrome browser leases for pi | [pi.dev](https://pi.dev/packages/@yceachan/pi-wsl-browser) |
 
 ## Layout
 
@@ -59,6 +60,7 @@ pi install npm:@yceachan/pi-gadget
 pi install npm:@yceachan/pi-shelld
 pi install npm:@yceachan/pi-switch-cwd
 pi install npm:@yceachan/pi-vision-helper
+pi install npm:@yceachan/pi-wsl-browser
 ```
 
 ## Development

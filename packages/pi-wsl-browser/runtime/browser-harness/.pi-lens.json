@@ -1,0 +1,27 @@
+{
+  "rules": {
+    "vendor-baseline": {
+      "disable": [
+        "unchecked-throwing-call-python",
+        "no-identity-operator-on-literals",
+        "no-boolean-in-except",
+        "eval-exec",
+        "python-empty-except",
+        "E401",
+        "E402",
+        "E731",
+        "F401",
+        "F403",
+        "I001",
+        "B905",
+        "PIE807",
+        "S102",
+        "S108",
+        "S110",
+        "SIM105",
+        "SIM114",
+        "SIM117"
+      ]
+    }
+  }
+}

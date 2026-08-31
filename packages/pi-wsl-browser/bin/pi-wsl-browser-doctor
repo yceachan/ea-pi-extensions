@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+AGENT_DIR="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}"
+legacy_skill_paths=(
+  "$AGENT_DIR/skills/browser-harness"
+  "$HOME/.agents/skills/browser-harness"
+)
+legacy_script_paths=(
+  "${legacy_skill_paths[0]}/scripts/bh-edge"
+  "${legacy_skill_paths[0]}/scripts/bh-headless"
+  "${legacy_skill_paths[1]}/scripts/bh-edge"
+  "${legacy_skill_paths[1]}/scripts/bh-headless"
+)
+
+printf '%s\n' 'pi-wsl-browser doctor'
+printf 'package state: %s\n' "$AGENT_DIR/pi-wsl-browser"
+printf '%s\n' '' 'Legacy discovery paths (not removed automatically):'
+found=0
+for path in "${legacy_skill_paths[@]}"; do
+  if [[ -e "$path" ]]; then
+    printf '  FOUND skill: %s\n' "$path"
+    found=1
+  fi
+done
+for path in "${legacy_script_paths[@]}"; do
+  if [[ -e "$path" ]]; then
+    printf '  FOUND script: %s\n' "$path"
+    found=1
+  fi
+done
+if [[ "$found" -eq 0 ]]; then
+  printf '%s\n' '  none found'
+fi
+
+printf '%s\n' '' 'Command and uv checks:'
+if [[ -f "$ROOT/runtime/browser-harness/uv.lock" ]]; then
+  printf '%s\n' '  bundled runtime lock: present'
+else
+  printf '%s\n' '  bundled runtime lock: missing (package runtime is incomplete)'
+fi
+if command -v browser-harness >/dev/null 2>&1; then
+  printf '  FOUND browser-harness command: %s\n' "$(command -v browser-harness)"
+else
+  printf '%s\n' '  no browser-harness command on PATH'
+fi
+if command -v uv >/dev/null 2>&1; then
+  uv tool list 2>/dev/null | grep -E '(^|[[:space:]])browser-harness([[:space:]]|$)' || printf '%s\n' '  no browser-harness uv tool'
+else
+  printf '%s\n' '  ERROR: uv is not installed; the pinned private runtime cannot start'
+fi
+
+printf '%s\n' '' 'Migration:'
+printf '%s\n' '  Remove old browser-harness Skill/binary manually after reviewing the FOUND paths.'
+printf '%s\n' '  Keep this package Skill; it uses the session-scoped pi-wsl-browser run wrapper.'
+printf '%s\n' '  No user files, browser profiles, or credentials were changed.'

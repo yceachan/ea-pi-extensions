@@ -1,0 +1,7 @@
+{
+  "ok": false,
+  "error": {
+    "code": "managed_no_active_lease",
+    "message": "acquire a managed root lease first"
+  }
+}

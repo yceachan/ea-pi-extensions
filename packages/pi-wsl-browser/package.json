@@ -1,0 +1,77 @@
+{
+  "name": "@yceachan/pi-wsl-browser",
+  "version": "0.1.0",
+  "description": "Session-scoped WSL Windows Edge/Chrome browser leases for pi",
+  "type": "module",
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "pi",
+    "browser",
+    "browser-harness",
+    "cdp",
+    "wsl",
+    "edge",
+    "chrome"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yceachan/ea-pi-extensions.git",
+    "directory": "packages/pi-wsl-browser"
+  },
+  "homepage": "https://github.com/yceachan/ea-pi-extensions#readme",
+  "files": [
+    "extensions",
+    "src",
+    "controller",
+    "runtime/browser-harness/src/browser_harness",
+    "runtime/browser-harness/pyproject.toml",
+    "runtime/browser-harness/README.md",
+    "runtime/browser-harness/uv.lock",
+    "runtime/browser-harness/LICENSE",
+    "runtime/browser-harness/UPSTREAM_BASELINE.json",
+    "bin",
+    "skills",
+    "config.json",
+    "README.md",
+    "UPSTREAM.md"
+  ],
+  "bin": {
+    "pi-wsl-browser": "bin/pi-wsl-browser"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "pi": {
+    "extensions": [
+      "./extensions/pi-wsl-browser.ts"
+    ],
+    "skills": [
+      "./skills"
+    ]
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "bun test test/ && cd runtime/browser-harness && uv run --frozen --extra test pytest -q"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-agent-core": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-ai": "*",
+    "typebox": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-agent-core": "^0.84.2",
+    "@earendil-works/pi-ai": "^0.84.2",
+    "@earendil-works/pi-coding-agent": "^0.84.2",
+    "@types/node": "^24",
+    "bun-types": "^1.3.14",
+    "typebox": "^1.3.7",
+    "typescript": "^6.0.3"
+  },
+  "trustedDependencies": [
+    "@google/genai",
+    "protobufjs"
+  ]
+}

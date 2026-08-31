@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.log
+.env
+*.egg-info/
+.browser-harness-dev/
+build/
+dist/
+.idea/
+.claude/
