@@ -42,6 +42,9 @@
     "typebox": "^1.3.7",
     "@types/node": "^24"
   },
+  "scripts": {
+    "test": "bun test test/"
+  },
   "trustedDependencies": [
     "@google/genai",
     "protobufjs"

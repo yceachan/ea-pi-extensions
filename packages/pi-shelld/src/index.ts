@@ -25,6 +25,8 @@ export interface ShelldServiceV1 {
 		command: string;
 		cwd: string;
 		name?: string;
+		/** Environment overlay for the child process; never persisted in shell state. */
+		env?: NodeJS.ProcessEnv;
 	}): Promise<{
 		shellId: string;
 		logFile: string;
