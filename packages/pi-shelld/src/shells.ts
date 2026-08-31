@@ -372,6 +372,22 @@ export async function spawnShell(options: SpawnOptions): Promise<SpawnResult> {
 	}
 }
 
+/**
+ * Merge an optional child-process environment overlay without mutating the
+ * parent environment. Undefined overlay values explicitly remove inherited
+ * keys so callers can clear secrets or other process defaults.
+ */
+export function mergeProcessEnv(
+	overlay?: NodeJS.ProcessEnv,
+): NodeJS.ProcessEnv {
+	const merged = { ...process.env };
+	for (const [key, value] of Object.entries(overlay ?? {})) {
+		if (value === undefined) delete merged[key];
+		else merged[key] = value;
+	}
+	return merged;
+}
+
 /** Spawn and register one shell through the shared lifecycle boundary. */
 export async function startShell(options: SpawnOptions): Promise<{
 	shell: ShellRecord;
@@ -379,7 +395,7 @@ export async function startShell(options: SpawnOptions): Promise<{
 }> {
 	const spawned = await spawnShell({
 		...options,
-		env: options.env ? { ...process.env, ...options.env } : undefined,
+		env: mergeProcessEnv(options.env),
 	});
 	const shell: ShellRecord = {
 		id: spawned.id,
