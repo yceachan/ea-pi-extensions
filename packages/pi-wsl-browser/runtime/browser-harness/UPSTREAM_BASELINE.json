@@ -1,0 +1,27 @@
+{
+  "upstream": {
+    "name": "browser-harness",
+    "version": "0.1.9",
+    "tag": "v0.1.9",
+    "repository": "https://github.com/browser-use/browser-harness",
+    "commit": "41108b8676d4bdb58b26ab3b079c0b7b0f8f3926",
+    "license": "MIT",
+    "licenseFile": "LICENSE"
+  },
+  "vendor": {
+    "source": "git archive of the upstream tag; source layout preserved under src/browser_harness",
+    "runtimeEntryPoint": "python -m browser_harness.daemon",
+    "agentEntryPoint": "python -m browser_harness.run",
+    "lockfile": "uv.lock",
+    "lockfileGeneratedBy": "uv lock",
+    "managedMode": "BH_MANAGED=1",
+    "patches": [
+      "BH_MANAGED_SOCKET selects one session-scoped Unix socket and ignores BU_NAME",
+      "managed_control requires BH_MANAGED_CONTROL_TOKEN and exposes health/acquire-root/release-root/status/shutdown",
+      "managed mode attaches only the exact marker/target root and tracks opener descendants",
+      "managed agent CDP filters owned targets and denies target/browser lifecycle methods",
+      "managed mode disables cloud, autospawn, updater, auth, admin, launch, and discovery paths",
+      "managed stale sessions return an error without reattach or retry"
+    ]
+  }
+}

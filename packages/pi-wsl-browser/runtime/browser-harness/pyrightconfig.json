@@ -1,0 +1,6 @@
+{
+  "typeCheckingMode": "off",
+  "reportMissingImports": "none",
+  "reportMissingModuleSource": "none",
+  "exclude": ["tests"]
+}

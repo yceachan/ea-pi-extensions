@@ -1,0 +1,8 @@
+{
+  "meta": "managed_control",
+  "token": "fixture-token",
+  "action": "acquire-root",
+  "mode": "headless",
+  "profile": "Default",
+  "marker": "pi-wsl-browser-fixture"
+}

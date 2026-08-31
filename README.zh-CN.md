@@ -16,6 +16,7 @@
 | [`@yceachan/pi-shelld`](packages/pi-shelld) | `shell_daemon` 工具 + ⭕shell TUI 监视器，管理会话级后台 shell（服务器、监听器）；其他扩展可通过 `pi.events` 发现并复用其服务 | [pi.dev](https://pi.dev/packages/@yceachan/pi-shelld) |
 | [`@yceachan/pi-switch-cwd`](packages/pi-switch-cwd) | `/cwd`——切换会话工作目录 | [pi.dev](https://pi.dev/packages/@yceachan/pi-switch-cwd) |
 | [`@yceachan/pi-vision-helper`](packages/pi-vision-helper) | 主模型无视觉能力时的视觉理解工具；可复用 pi-registry 或自定义 Responses API | [pi.dev](https://pi.dev/packages/@yceachan/pi-vision-helper) |
+| [`@yceachan/pi-wsl-browser`](packages/pi-wsl-browser) | Session-scoped WSL Windows Edge/Chrome browser leases for pi | [pi.dev](https://pi.dev/packages/@yceachan/pi-wsl-browser) |
 
 ## Install
 
@@ -27,6 +28,7 @@ pi install npm:@yceachan/pi-gadget
 pi install npm:@yceachan/pi-shelld
 pi install npm:@yceachan/pi-switch-cwd
 pi install npm:@yceachan/pi-vision-helper
+pi install npm:@yceachan/pi-wsl-browser
 ```
 ## Layout
 

@@ -35,8 +35,10 @@ bun run test
    ├─ @yceachan/pi-better-btw       bun test test/
    ├─ @yceachan/pi-codex-imagegen   bun test test/
    ├─ @yceachan/pi-gadget           bun test test/
+   ├─ @yceachan/pi-shelld            bun test test/
    ├─ @yceachan/pi-switch-cwd       bun ./cwd-utils.test.ts
-   └─ @yceachan/pi-vision-helper    bun ./lib/vision-helper.test.ts
+   ├─ @yceachan/pi-vision-helper    bun ./lib/vision-helper.test.ts
+   └─ @yceachan/pi-wsl-browser      bun test test/ && cd runtime/browser-harness && uv run --frozen --extra test pytest -q
 ```
 
 workspace 编排 flag 语义：
@@ -66,7 +68,7 @@ bun 以**该 package 目录**为 cwd 执行其 workspace 脚本，包内脚本�
 | --- | --- | --- |
 | 纯函数、临时目录、内存 mock | `scripts.test` | `cwd-utils.test.ts`、`vision-helper.test.ts` |
 | 真实 Pi、tmux、模型调用、凭据、GUI、外部服务 | `scripts.test:e2e` | `e2e-test.sh`（tmux + 真实 pi + 默认模型） |
-| 尚无测试 | 省略字段 | `pi-better-mermaid`、`pi-shelld` |
+| 尚无测试 | 省略字段 | `pi-better-mermaid` |
 
 ## 注册示例
 
@@ -90,12 +92,12 @@ bun 以**该 package 目录**为 cwd 执行其 workspace 脚本，包内脚本�
 
 ## CI 结构
 
-[ci.yml](../.github/workflows/ci.yml) 双 job，均为 `persist-credentials: false` + SHA 锁定的 setup-bun（1.3.14）：
+[ci.yml](../.github/workflows/ci.yml) 双 job，均为 `persist-credentials: false` + SHA 锁定的 setup-bun（1.3.14）；`test` job 另以 SHA 锁定的 setup-uv（uv 0.12.3）提供运行时测试依赖：
 
 | job | 步骤 |
 | --- | --- |
 | `typecheck` | `bun install --frozen-lockfile` → `bun run typecheck` |
-| `test` | `bun install --frozen-lockfile` → `bun run test` |
+| `test` | setup-uv（SHA）→ `bun install --frozen-lockfile` → `bun run test` |
 
 `scripts.test:e2e` 不进 CI，手动执行：`bun run test:e2e`（需 tmux 与 `~/.pi/agent/settings.json` 中的默认模型）。
 

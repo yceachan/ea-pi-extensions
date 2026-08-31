@@ -15,7 +15,9 @@ rm -rf ~/.pi/agent/sessions/--tmp-pi-switch-cwd-e2e-* 2>/dev/null
 tmux set -g extended-keys on 2>/dev/null
 tmux new-session -d -s $SES -x 240 -y 60 -c $ROOT/home
 sleep 1
-tmux send-keys -t $SES "pi -e $EXT" Enter
+# Disable discovered extensions so the explicit checkout under test is the only
+# owner of /cwd (the default settings may already load another checkout).
+tmux send-keys -t $SES "pi --no-extensions -e $EXT" Enter
 
 wait_for() { # $1 = pattern, $2 = seconds
 	for i in $(seq 1 $2); do

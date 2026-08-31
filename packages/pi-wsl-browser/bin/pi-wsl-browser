@@ -1,0 +1,116 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+if [[ "${1:-}" == "doctor" ]]; then
+  shift
+  exec "$ROOT/bin/pi-wsl-browser-doctor" "$@"
+fi
+
+if [[ "${1:-}" != "run" ]]; then
+  printf '%s\n' 'usage: pi-wsl-browser run [browser-harness options]' >&2
+  printf '%s\n' '       pi-wsl-browser doctor' >&2
+  exit 2
+fi
+shift
+for arg in "$@"; do
+  if [[ "$arg" != "--debug-clicks" ]]; then
+    printf '%s\n' '{"ok":false,"error":{"code":"managed_wrapper_option_denied","message":"the managed wrapper accepts only browser script input"}}' >&2
+    exit 2
+  fi
+done
+
+AGENT_DIR="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}"
+AGENT_DIR="$(realpath -m -s -- "$AGENT_DIR")"
+SESSION_ID="${PI_SESSION_ID:-}"
+SESSION_FILE="${PI_SESSION_FILE:-}"
+if [[ -n "$SESSION_FILE" ]]; then
+  CANONICAL="file:$(realpath -m -s -- "$SESSION_FILE")"
+elif [[ -n "$SESSION_ID" ]]; then
+  CANONICAL="id:$SESSION_ID"
+else
+  printf '%s\n' '{"ok":false,"error":{"code":"session_identity_missing","message":"PI_SESSION_ID or PI_SESSION_FILE is required"}}' >&2
+  exit 1
+fi
+
+SESSION_KEY="$(printf '%s' "$CANONICAL" | sha256sum | awk '{print substr($1,1,32)}')"
+DESCRIPTOR="$AGENT_DIR/pi-wsl-browser/sessions/$SESSION_KEY.json"
+if [[ ! -r "$DESCRIPTOR" ]]; then
+  printf '{"ok":false,"error":{"code":"managed_descriptor_missing","message":"no managed browser lease exists for the current Pi session"}}\n' >&2
+  exit 1
+fi
+
+DESCRIPTOR_FIELDS="$(node - "$DESCRIPTOR" "$SESSION_KEY" <<'NODE'
+const fs = require("node:fs");
+const path = require("node:path");
+const [descriptorPath, expectedKey] = process.argv.slice(2);
+const fail = (code, message) => {
+  const error = new Error(message);
+  error.code = code;
+  throw error;
+};
+try {
+  const descriptor = JSON.parse(fs.readFileSync(descriptorPath, "utf8"));
+  if (descriptor.version !== 1 || descriptor.sessionKey !== expectedKey) {
+    fail("managed_descriptor_invalid", "managed descriptor does not belong to the current Pi session");
+  }
+  if (descriptor.daemon?.status !== "running") {
+    fail("managed_daemon_unavailable", "managed browser daemon is not running");
+  }
+  if (!descriptor.lease?.leaseId) {
+    fail("managed_no_active_lease", "acquire a managed root lease first");
+  }
+  const stateRoot = path.resolve(path.dirname(descriptorPath), expectedKey);
+  const safeStatePath = (value, field) => {
+    if (typeof value !== "string" || !path.isAbsolute(value)) {
+      fail("managed_descriptor_invalid", `managed descriptor has no absolute ${field}`);
+    }
+    const normalized = path.resolve(value);
+    const relative = path.relative(stateRoot, normalized);
+    if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) {
+      fail("managed_descriptor_invalid", `${field} must stay inside the current session state`);
+    }
+    return normalized;
+  };
+  const socketPath = safeStatePath(descriptor.socketPath, "socketPath");
+  const runtimeDir = safeStatePath(descriptor.runtimeDir, "runtimeDir");
+  const tmpDir = safeStatePath(descriptor.tmpDir, "tmpDir");
+  if (Object.prototype.hasOwnProperty.call(descriptor, "controlToken") ||
+      Object.prototype.hasOwnProperty.call(descriptor, "cdpUrl") ||
+      Object.prototype.hasOwnProperty.call(descriptor, "cdpWs")) {
+    fail("managed_descriptor_invalid", "managed descriptor contains forbidden privileged fields");
+  }
+  process.stdout.write([socketPath, runtimeDir, tmpDir].join("\n"));
+} catch (error) {
+  process.stderr.write(JSON.stringify({
+    ok: false,
+    error: { code: error.code || "managed_descriptor_invalid", message: String(error.message || error) }
+  }) + "\n");
+  process.exit(1);
+}
+NODE
+)"
+mapfile -t DESCRIPTOR_VALUES <<<"$DESCRIPTOR_FIELDS"
+SOCKET="${DESCRIPTOR_VALUES[0]:-}"
+RUNTIME_DIR="${DESCRIPTOR_VALUES[1]:-}"
+TMP_DIR="${DESCRIPTOR_VALUES[2]:-}"
+
+# The managed fork reads only this socket. Explicit CDP/name/token overrides
+# from the caller are removed so an agent cannot select another daemon or lease.
+unset BU_NAME BU_BROWSER_ID BU_AUTOSPAWN BU_CDP_URL BU_CDP_WS BH_MANAGED_CONTROL_TOKEN BH_MANAGED_SOCKET BH_RUNTIME_DIR BH_TMP_DIR PYTHONPATH
+export BH_MANAGED=1
+export BH_MANAGED_SOCKET="$SOCKET"
+export BH_RUNTIME_DIR="$RUNTIME_DIR"
+export BH_TMP_DIR="$TMP_DIR"
+# The package runtime is immutable: no caller-selected Python, project, or
+# PYTHONPATH is allowed to change the pinned fork.
+RUNTIME_ROOT="$ROOT/runtime/browser-harness/src"
+RUNTIME_PROJECT="$ROOT/runtime/browser-harness"
+export PYTHONPATH="$RUNTIME_ROOT"
+if ! command -v uv >/dev/null 2>&1; then
+  printf '%s\n' '{"ok":false,"error":{"code":"uv_unavailable","message":"uv is required to run the pinned private browser-harness runtime"}}' >&2
+  exit 1
+fi
+# --frozen prevents an agent from changing the pinned runtime dependency set.
+exec uv run --project "$RUNTIME_PROJECT" --frozen python -m browser_harness.run "$@"
