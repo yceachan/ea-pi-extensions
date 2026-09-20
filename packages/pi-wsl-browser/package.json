@@ -55,6 +55,9 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "bun test test/ && cd runtime/browser-harness && uv run --frozen --extra test pytest -q"
   },
+  "dependencies": {
+    "@yceachan/pi-shelld": "^0.3.0"
+  },
   "peerDependencies": {
     "@earendil-works/pi-agent-core": "*",
     "@earendil-works/pi-coding-agent": "*",

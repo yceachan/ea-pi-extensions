@@ -9,7 +9,7 @@ pi install npm:@yceachan/pi-wsl-browser
 pi install npm:@yceachan/pi-shelld
 ```
 
-Load both extensions and reload Pi. `pi-shelld` supplies the session-scoped service used for the private controller/daemon and its TUI log monitor.
+`pi-wsl-browser` declares `pi-shelld` as a runtime dependency, so npm installation brings in a compatible version. Pi still loads extension resources explicitly; the second command enables `pi-shelld` as a Pi package. For an isolated workspace checkout, use `pi --no-extensions -e packages/pi-shelld -e packages/pi-wsl-browser`. `pi-shelld` supplies the session-scoped service used for the private controller/daemon and its TUI log monitor.
 
 ## Workflow
 

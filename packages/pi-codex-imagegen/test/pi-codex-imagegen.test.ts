@@ -211,7 +211,7 @@ test("fails without pi-shelld service before creating work", async () => {
 			failure = error;
 		}
 		expect(String(failure)).toMatch(/service v1 is unavailable/);
-		expect(manifest.dependencies?.["@yceachan/pi-shelld"]).toBeUndefined();
+		expect(manifest.dependencies?.["@yceachan/pi-shelld"]).toBe("^0.3.0");
 		expect(existsSync(dirname(outputPath))).toBe(false);
 		expect(
 			readdirSync(tmpdir()).filter(

@@ -3,24 +3,30 @@
 A [pi](https://github.com/earendil-works/pi) extension that delegates PNG generation to
 the locally authenticated Codex CLI and its built-in `imagegen` capability.
 
-Codex runs in an isolated temporary directory through a separately loaded
+Codex runs in an isolated temporary directory through the
 [`@yceachan/pi-shelld`](https://www.npmjs.com/package/@yceachan/pi-shelld) extension.
 The ⭕shell monitor shows its live status, runtime, and log while the main agent keeps
-working. The two packages are installed and loaded independently; pi-codex-imagegen does
-not depend on or bundle pi-shelld.
+working. pi-codex-imagegen declares pi-shelld as a runtime dependency, so npm installation
+brings in a compatible version. Pi still loads extension resources explicitly, so pi-shelld
+must also be enabled as a Pi package or passed with a separate `-e` during local development.
 
 ## Install
 
-Install both pi packages separately:
+Install pi-codex-imagegen and enable its pi-shelld dependency as a Pi extension:
 
 ```bash
 pi install npm:@yceachan/pi-shelld
 pi install npm:@yceachan/pi-codex-imagegen
 ```
 
-Local packages work the same way as long as both extensions are loaded into the same pi
-process. Install Codex CLI and complete `codex login` first. The extension reuses that
-local login and does not accept or store API keys.
+For a workspace checkout, load both local packages into the same Pi process:
+
+```bash
+pi --no-extensions -e packages/pi-shelld -e packages/pi-codex-imagegen
+```
+
+Install Codex CLI and complete `codex login` first. The extension reuses that local login
+and does not accept or store API keys.
 
 ## Tool
 

@@ -35,6 +35,9 @@
     "typecheck": "tsc --noEmit",
     "test": "bun test test/"
   },
+  "dependencies": {
+    "@yceachan/pi-shelld": "^0.3.0"
+  },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*",
     "typebox": "*"
