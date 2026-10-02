@@ -8,6 +8,7 @@ import type { OverlayHandle, Terminal, TUI } from "@earendil-works/pi-tui";
 import {
   buildSessionContext,
   ExtensionRunner,
+  wrapRegisteredTools,
 } from "@earendil-works/pi-coding-agent";
 import { FileActivityTracker } from "./file-activity-tracker.ts";
 import { loadConfig } from "./config.ts";
@@ -37,23 +38,7 @@ ExtensionRunner.prototype.getAllRegisteredTools = function () {
 
 function getExtensionAgentTools(): AgentTool[] {
   if (!capturedRunner) return [];
-  return capturedRunner.getAllRegisteredTools().map((rt): AgentTool => {
-    const { definition } = rt;
-    return {
-      name: definition.name,
-      label: definition.label,
-      description: definition.description,
-      parameters: definition.parameters,
-      execute: (toolCallId, params, signal, onUpdate) =>
-        definition.execute(
-          toolCallId,
-          params,
-          signal,
-          onUpdate,
-          capturedRunner!.createContext(),
-        ),
-    };
-  });
+  return wrapRegisteredTools(capturedRunner.getAllRegisteredTools(), capturedRunner);
 }
 
 const OVERLAY_BLOCKED_ERROR = "PI_SIDE_CHAT_OVERLAY_BLOCKED";
@@ -70,13 +55,11 @@ export default function sideChatExtension(pi: ExtensionAPI) {
   let removeMouseListener: (() => void) | null = null;
 
   /**
-   * Enable xterm mouse reporting + SGR while the side chat is open and route
-   * overlay events (wheel scroll, drag-select, copy) to the chat. Mouse
-   * sequences are always consumed so they never leak into the editor as
-   * garbage input.
+   * Regular mode needs a raw SGR listener. Fullscreen owns reporting and
+   * dispatches normalized events directly to SideChatOverlay.handleMouse.
    */
   const installMouseHandler = (tui: TUI) => {
-    if (removeMouseListener) return;
+    if (tui.mode === "fullscreen" || removeMouseListener) return;
     enableMouseReporting(tui.terminal);
     mouseTerminal = tui.terminal;
     removeMouseListener = tui.addInputListener((data) => {
@@ -93,8 +76,10 @@ export default function sideChatExtension(pi: ExtensionAPI) {
         const viewport = overlay.getViewport();
         const overOverlay =
           viewport !== null &&
-          event.row >= viewport.topRow &&
-          event.row < viewport.topRow + viewport.height;
+          event.row - 1 >= viewport.topRow &&
+          event.row - 1 < viewport.topRow + viewport.height &&
+          event.col - 1 >= viewport.leftCol &&
+          event.col - 1 < viewport.leftCol + viewport.width;
         if (overOverlay) {
           // A press on the chat focuses the overlay, so the subsequent
           // Ctrl+C / Ctrl+Shift+C lands in the overlay (not the main editor)
@@ -110,9 +95,7 @@ export default function sideChatExtension(pi: ExtensionAPI) {
         }
       }
       // Always consume: mouse sequences must never leak into the editor as
-      // garbage input. (In fullscreen mode the alt-screen handler already
-      // consumed every SGR sequence before us, so this branch only fires in
-      // regular mode.)
+      // garbage input. This listener is installed only in regular mode.
       return { consume: true };
     });
   };
@@ -128,18 +111,14 @@ export default function sideChatExtension(pi: ExtensionAPI) {
   };
 
   /**
-   * Keep terminal mouse reporting bound to overlay *visibility* (issue #17
-   * Q8): backgrounding the chat (hide) must release the terminal's native
-   * selection, restoring it on show. Focus is irrelevant — wheel scroll
-   * keeps working while visible-but-unfocused.
+   * Regular-mode reporting follows visibility. Fullscreen reporting belongs
+   * to Pi and must remain untouched when the overlay is hidden or closed.
    */
   const syncMouseReporting = () => {
+    if (overlayHandle?.isHidden()) activeOverlay?.cancelMouseDrag();
     if (!removeMouseListener || !mouseTerminal) return;
     if (overlayHandle?.isHidden()) {
       disableMouseReporting(mouseTerminal);
-      // Reporting is off, so no release will arrive: abort any in-flight
-      // drag so a stale capture cannot swallow later events.
-      activeOverlay?.cancelMouseDrag();
     } else {
       enableMouseReporting(mouseTerminal);
     }

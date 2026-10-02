@@ -81,7 +81,7 @@ What changed since I opened this side chat?
 
 **Scroll the history** — `PgUp`/`PgDn` scroll by a page, `Shift+↑`/`Shift+↓` by a few lines, and the mouse wheel scrolls when the pointer is over the chat. When scrolled away from the latest message, a `[↑N]` indicator appears in the header and the hint bar switches to `↑N · PgDn/Wheel ↓`. While streaming, the viewport follows the bottom until you scroll away, then freezes content-anchored (new lines grow the scroll offset instead of sliding the visible content); it resumes following once you're back at the bottom or a new message arrives.
 
-**Mouse select + hotkey copy** — drag to select chat text (inverse-video highlight); double-click selects the whole rendered line. Copying is hotkey-only: `Ctrl+C` / `Ctrl+Shift+C` copies the retained selection through the native clipboard cascade (`wl-copy`/`xclip`, OSC 52 fallback); the selection stays highlighted so repeated presses re-copy. Dragging never touches the clipboard, so mouse interaction stays off the event loop. Mouse reporting follows overlay *visibility* — backgrounding the chat releases the terminal's native selection.
+**Mouse select + hotkey copy** — drag to select chat text (inverse-video highlight); double-click selects the whole rendered line. Copying is hotkey-only: `Ctrl+C` / `Ctrl+Shift+C` copies the retained selection through the native clipboard cascade (`wl-copy`/`xclip`, OSC 52 fallback); the selection stays highlighted so repeated presses re-copy. Dragging never touches the clipboard, so mouse interaction stays off the event loop. In Pi 1.0 fullscreen mode, the overlay uses Pi's normalized mouse dispatch and drag capture; clicking the input area positions its cursor. Backgrounding or closing the chat leaves Pi's main-screen mouse controls intact. In regular mode, extension-owned mouse reporting follows overlay *visibility*, so backgrounding restores terminal-native selection.
 
 **Transcript export** — `Alt+E` dumps the btw history (forked context, framing block, conversation, in-flight stream) to `$CWD/.agents/eval/pi-better-btw-<timestamp>.md` as a markdown diagnostic artifact, useful for debugging feature work.
 
@@ -170,7 +170,7 @@ The btw context keeps the main lane's system prompt in the system slot and injec
 
 Main-agent tool execution events are tracked to maintain a set of written file paths (`srcs/file-activity-tracker.ts`); write-capable tools are wrapped to warn before touching those paths (`srcs/tool-wrapper.ts`).
 
-While the side chat is open, xterm mouse reporting (SGR, button + motion tracking) is enabled and overlay events are routed to the chat: the wheel scrolls it, and a left-button drag selects text. Copying is hotkey-only as described above. All mouse sequences are consumed so they never leak into the editor, and reporting follows overlay visibility.
+In fullscreen mode (Pi 1.0's default), `SideChatOverlay.handleMouse()` receives component-local events from Pi. It handles wheel scrolling, captures chat selection drags, and forwards input-area clicks to the editor. Clipboard copying stays hotkey-only. Pi owns terminal mouse reporting throughout the overlay lifecycle. In regular mode, a raw SGR listener enables reporting only while the overlay is visible and consumes mouse sequences before they reach the editor.
 
 `peek_main` reads the current session branch on demand and returns a compact summary.
 
@@ -215,7 +215,7 @@ The published package ships `srcs/`, `prompts/`, `config.json` and the docs; tes
 - Does not merge messages back into the main thread
 - Bash overlap detection is heuristic — catches common write patterns, not all
 - `peek_main` is on-demand, not live
-- Mouse interaction (scroll and select) only works in the regular (non-fullscreen) TUI mode — the fullscreen alt-screen handler owns all mouse sequences
+- Fullscreen mouse support uses Pi 1.0's component mouse API; the regular-mode SGR path remains available
 
 ## License
 

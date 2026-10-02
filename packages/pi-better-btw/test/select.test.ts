@@ -2,9 +2,8 @@
  * Regression tests for the side chat mouse selection (issue #17, C scheme):
  * drag/double-click select with an inverse-video highlight; copying is
  * hotkey-only via Ctrl+C / Ctrl+Shift+C on the retained selection. Runs
- * against the real modules with a mocked TUI/theme; the real copyToClipboard
- * cascade lands on its OSC 52 fallback in CI-like environments (no
- * wl-copy/xclip), which is captured via stdout.
+ * against the real modules with a mocked TUI/theme and clipboard boundary,
+ * independent of the machine's desktop, terminal and clipboard commands.
  */
 import { describe, expect, test } from "bun:test";
 import { SideChatMessages } from "../srcs/side-chat-messages.ts";
@@ -19,16 +18,10 @@ import {
 } from "../srcs/side-chat-mouse.ts";
 import { stripTerminalSequences } from "@earendil-works/pi-tui";
 
-// Capture the real copyToClipboard cascade at its OSC 52 fallback.
-let osc52Writes: string[] = [];
-(process.stdout as any).write = (s: string) => {
-  const match = /\x1b]52;c;([^\x07]+)\x07/.exec(s);
-  if (match) osc52Writes.push(Buffer.from(match[1], "base64").toString("utf8"));
-  return true;
-};
+let copiedTexts: string[] = [];
 const osc52CopiedText = (): string[] => {
-  const out = [...osc52Writes];
-  osc52Writes = [];
+  const out = [...copiedTexts];
+  copiedTexts = [];
   return out;
 };
 const tick = () => new Promise<void>((r) => setTimeout(r, 0));
@@ -80,6 +73,7 @@ function makeOverlay(): SideChatOverlay {
     onBackground: () => {},
     onExport: () => {},
     onClose: () => {},
+    copyText: async (text: string) => { copiedTexts.push(text); },
   };
   const overlay = new SideChatOverlay(opts);
   (overlay as any).messages.setMessages(DEFAULT_MESSAGES);
@@ -256,7 +250,7 @@ describe("side-chat-overlay.ts", () => {
   });
 
   test("copy feedback shows in the status line (hotkey copy)", async () => {
-    osc52Writes = [];
+    copiedTexts = [];
     const overlay = makeOverlay();
     overlay.handleMouseEvent({ button: 0, col: 19, row: 5, isRelease: false });
     overlay.handleMouseEvent({ button: 32, col: 24, row: 5, isRelease: false });
@@ -401,13 +395,10 @@ describe("side-chat-overlay.ts", () => {
     const overlay = makeOverlay();
     const M: any = (overlay as any).messages;
     M.setSelection({ line: 0, col: 0 }, { line: 0, col: 3 });
-    // Break the OSC 52 fallback so the whole cascade fails.
-    const origWrite = (process.stdout as any).write;
-    (process.stdout as any).write = () => {
-      throw new Error("stdout closed");
+    (overlay as any).options.copyText = async () => {
+      throw new Error("clipboard unavailable");
     };
-    const failed = await (overlay as any).copySelectionToClipboard();
-    (process.stdout as any).write = origWrite;
+    const failed = await overlay.copySelectionToClipboard();
     expect(failed).toBe(false);
     expect(M.render(80).some((l: string) => l.includes("Copy failed"))).toBe(
       true,

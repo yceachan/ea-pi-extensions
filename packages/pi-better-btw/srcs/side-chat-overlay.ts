@@ -29,6 +29,8 @@ import {
   type Component,
   type Focusable,
   type TUI,
+  type TuiMouseEvent,
+  type TuiMouseEventResult,
 } from "@earendil-works/pi-tui";
 import type { FileActivityTracker } from "./file-activity-tracker.ts";
 import { forkSurgery } from "./fork-surgery.ts";
@@ -81,13 +83,14 @@ interface SideChatOverlayOptions {
   ) => void;
   /** Alt+E export written to $CWD/.agents/eval/ — called with the written path. */
   onExport: (path: string) => void;
+  /** Clipboard boundary; defaults to Pi's native/OSC 52 cascade. */
+  copyText?: (text: string) => Promise<void>;
 }
 
 /** Overlay max-height used for the side chat (adapted for small terminals at render time). */
 export const SIDE_CHAT_OVERLAY_MAX_HEIGHT = "88%";
 export const SIDE_CHAT_OVERLAY_MARGIN_TOP = 1;
-/** Overlay width (percent) and horizontal margins, matching index.ts overlayOptions. */
-const SIDE_CHAT_OVERLAY_WIDTH = "85%";
+/** Horizontal margins, matching index.ts overlayOptions. */
 const SIDE_CHAT_OVERLAY_MARGIN_LEFT = 2;
 const SIDE_CHAT_OVERLAY_MARGIN_RIGHT = 2;
 /** Two quick presses within this window (same line) count as a double-click → select line. */
@@ -164,6 +167,7 @@ export class SideChatOverlay implements Component, Focusable {
   private lastRenderHeight = 0;
   /** Geometry of the last render (screen coords), used for mouse hit-testing. */
   private geometry: ChatGeometry | null = null;
+  private editorLayout: { top: number; height: number; width: number } | null = null;
   /** Mouse drag state: set while a left-button selection drag is in progress. */
   private mouseDragging = false;
   private mouseAnchor: CellPos = { line: 0, col: 0 };
@@ -197,10 +201,10 @@ export class SideChatOverlay implements Component, Focusable {
   }
 
   /**
-   * Screen region occupied by the overlay (0-based rows), used to route mouse
+   * Screen rectangle occupied by the overlay (0-based), used to route mouse
    * wheel events to the chat. Returns null when the overlay is gone.
    */
-  getViewport(): { topRow: number; height: number } | null {
+  getViewport(): { topRow: number; leftCol: number; width: number; height: number } | null {
     if (this.disposed) return null;
     const rows = this.options.tui.terminal.rows;
     const maxHeight = Math.max(
@@ -212,6 +216,8 @@ export class SideChatOverlay implements Component, Focusable {
     );
     return {
       topRow: SIDE_CHAT_OVERLAY_MARGIN_TOP,
+      leftCol: (this.geometry?.contentCol ?? 2) - 2,
+      width: (this.geometry?.innerWidth ?? 0) + 4,
       height: Math.min(this.lastRenderHeight, maxHeight),
     };
   }
@@ -230,12 +236,74 @@ export class SideChatOverlay implements Component, Focusable {
 
   /**
    * Abort an in-flight drag without waiting for the release (used when the
-   * overlay is hidden mid-drag and mouse reporting is turned off).
+   * overlay is hidden mid-drag).
    */
   cancelMouseDrag(): void {
     this.mouseDragging = false;
     this.pendingDoubleClick = false;
+    this.lastPressPos = null;
     this.messages.clearSelection();
+  }
+
+  /** Fullscreen entry point: Pi supplies overlay-local coordinates and owns capture. */
+  handleMouse(event: TuiMouseEvent): TuiMouseEventResult | undefined {
+    if (this.disposed) return { handled: true, render: false };
+    // Use the dispatched rectangle, not a guessed percentage/terminal origin.
+    // Captured drag coordinates can lie outside this rectangle.
+    if (this.geometry) {
+      this.geometry = {
+        ...this.geometry,
+        msgTopRow: event.screenY - event.y + 3,
+        contentCol: event.screenX - event.x + 2,
+        innerWidth: Math.max(0, event.width - 4),
+        msgHeight: Math.max(0, Math.min(this.geometry.msgHeight, event.height - 3)),
+      };
+    }
+    if (event.type === "wheel") {
+      this.scrollByLines(-(event.wheelDelta ?? 0));
+      return { handled: true, render: false };
+    }
+    const editor = this.editorLayout;
+    if (
+      !this.mouseDragging && editor && event.y >= editor.top &&
+      event.y < editor.top + editor.height && event.x >= 2 &&
+      event.x < 2 + editor.width
+    ) {
+      if (event.type === "press") this.cancelMouseDrag();
+      const result = this.editor.handleMouse?.({
+        ...event,
+        x: event.x - 2,
+        y: event.y - editor.top,
+        width: editor.width,
+        height: editor.height,
+      });
+      // Keep keyboard focus on the overlay so its shortcuts still work.
+      return result ?? { handled: true, render: false };
+    }
+    // Consume frame clicks as well: Pi's transcript selection must not select
+    // the main conversation hidden beneath the overlay.
+    const primaryGesture = event.button === "left" ||
+      (event.type === "release" && this.mouseDragging);
+    if (
+      !primaryGesture ||
+      ((event.shift || event.alt || event.ctrl) && !this.mouseDragging) ||
+      event.type === "click" || event.type === "move"
+    ) {
+      return { handled: true, render: false };
+    }
+    this.handleMouseEvent({
+      button: event.type === "drag" ? 32 : 0,
+      col: event.screenX + 1,
+      row: event.screenY + 1,
+      isRelease: event.type === "release",
+    });
+    return {
+      handled: true,
+      capture: this.mouseDragging,
+      focus: event.type === "press",
+      // The shared handler coalesces drag rendering and paints releases.
+      render: false,
+    };
   }
 
   /**
@@ -250,7 +318,11 @@ export class SideChatOverlay implements Component, Focusable {
     }
     if (isLeftPress(event)) {
       const pos = this.screenToChat(event.row - 1, event.col - 1);
-      if (!pos) return;
+      if (!pos) {
+        this.cancelMouseDrag();
+        this.options.tui.requestRender();
+        return;
+      }
       const now = Date.now();
       const doubleClick =
         this.lastPressPos !== null &&
@@ -330,7 +402,7 @@ export class SideChatOverlay implements Component, Focusable {
     const text = this.messages.getSelectedText();
     if (!text) return false;
     try {
-      await copyToClipboard(text);
+      await (this.options.copyText ?? copyToClipboard)(text);
     } catch (error) {
       this.messages.setErrorContent(
         `Copy failed: ${error instanceof Error ? error.message : String(error)}`,
@@ -349,10 +421,10 @@ export class SideChatOverlay implements Component, Focusable {
     return true;
   }
 
-  /** Map 1-based screen coords to a chat cell position, or null off the chat area. */
+  /** Map 0-based screen coords to a chat cell position, or null off the chat area. */
   private screenToChat(row: number, col: number): CellPos | null {
     const g = this.geometry;
-    if (!g) return null;
+    if (!g || g.msgHeight <= 0 || g.innerWidth <= 0) return null;
     const line = row - g.msgTopRow;
     const c = col - g.contentCol;
     if (line < 0 || line >= g.msgHeight || c < 0 || c >= g.innerWidth)
@@ -365,7 +437,7 @@ export class SideChatOverlay implements Component, Focusable {
     const g = this.geometry;
     if (!g) return { line: 0, col: 0 };
     const line = Math.max(0, Math.min(row - g.msgTopRow, g.msgHeight - 1));
-    const c = Math.max(0, Math.min(col - g.contentCol, g.innerWidth - 1));
+    const c = Math.max(0, Math.min(col - g.contentCol, g.innerWidth));
     return { line, col: c };
   }
 
@@ -754,6 +826,10 @@ export class SideChatOverlay implements Component, Focusable {
 
   render(width: number): string[] {
     if (width < 4) {
+      this.geometry = null;
+      this.editorLayout = null;
+      this.lastRenderHeight = 1;
+      this.cancelMouseDrag();
       return [" ".repeat(Math.max(0, width))];
     }
 
@@ -800,6 +876,12 @@ export class SideChatOverlay implements Component, Focusable {
     const msgLines = this.messages.render(innerWidth);
     for (let i = msgLines.length; i < maxLines; i++) msgLines.push("");
 
+    const editorLines = this.editor.render(innerWidth);
+    this.editorLayout = {
+      top: 4 + msgLines.length,
+      height: editorLines.length,
+      width: innerWidth,
+    };
     const lines = renderSideChatFrame({
       width,
       theme,
@@ -807,12 +889,13 @@ export class SideChatOverlay implements Component, Focusable {
       headerLeft: left,
       headerRight: status,
       msgLines,
-      editorLines: this.editor.render(innerWidth),
+      editorLines,
       hints: hintLines,
     });
     this.lastRenderHeight = lines.length;
     this.geometry = computeChatGeometry(
       this.options.tui.terminal.columns,
+      width,
       msgLines.length,
     );
     return lines;
@@ -947,15 +1030,12 @@ function parsePercent(value: string, reference: number): number {
  */
 function computeChatGeometry(
   termCols: number,
+  width: number,
   msgHeight: number,
 ): ChatGeometry {
   const availWidth = Math.max(
     1,
     termCols - SIDE_CHAT_OVERLAY_MARGIN_LEFT - SIDE_CHAT_OVERLAY_MARGIN_RIGHT,
-  );
-  const width = Math.max(
-    1,
-    Math.min(parsePercent(SIDE_CHAT_OVERLAY_WIDTH, termCols), availWidth),
   );
   const leftCol =
     SIDE_CHAT_OVERLAY_MARGIN_LEFT + Math.floor((availWidth - width) / 2);
