@@ -13,6 +13,7 @@
 | [`@yceachan/pi-better-mermaid`](packages/pi-better-mermaid) | `better-mermaid`——把 Mermaid 规范整理为 skill，针对 Typora 的渲染边界用 `mmdc` 校验，并处理语法错误重试 | [pi.dev](https://pi.dev/packages/@yceachan/pi-better-mermaid) |
 | [`@yceachan/pi-codex-imagegen`](packages/pi-codex-imagegen) | 复用本地 Codex 登录态调用 `imagegen` 生成图像；由独立加载的 `pi-shelld` 展示实时日志、状态与耗时 | [pi.dev](https://pi.dev/packages/@yceachan/pi-codex-imagegen) |
 | [`@yceachan/pi-gadget`](packages/pi-gadget) | 单文件小工具：`/clear` 归档会话、`/exit` 退出 pi、`pi-cite-wslpath` 把 WSL 路径转换为 Windows Terminal 可点的超链接 | [pi.dev](https://pi.dev/packages/@yceachan/pi-gadget) |
+| [`@yceachan/pi-quiet`](packages/pi-quiet) | fork 自 `@zenspc/pi-quiet`，保留紧凑工具行和动词分组，修复 Pi 1.1 渲染接口导致的工具名 undefined | [pi.dev](https://pi.dev/packages/@yceachan/pi-quiet) |
 | [`@yceachan/pi-shelld`](packages/pi-shelld) | `shell_daemon` 工具 + ⭕shell TUI 监视器，管理会话级后台 shell（服务器、监听器）；其他扩展可通过 `pi.events` 发现并复用其服务 | [pi.dev](https://pi.dev/packages/@yceachan/pi-shelld) |
 | [`@yceachan/pi-switch-cwd`](packages/pi-switch-cwd) | `/cwd`——切换会话工作目录 | [pi.dev](https://pi.dev/packages/@yceachan/pi-switch-cwd) |
 | [`@yceachan/pi-vision-helper`](packages/pi-vision-helper) | 主模型无视觉能力时的视觉理解工具；可复用 pi-registry 或自定义 Responses API | [pi.dev](https://pi.dev/packages/@yceachan/pi-vision-helper) |
@@ -25,6 +26,7 @@ pi install npm:@yceachan/pi-better-btw
 pi install npm:@yceachan/pi-better-mermaid
 pi install npm:@yceachan/pi-codex-imagegen
 pi install npm:@yceachan/pi-gadget
+pi install npm:@yceachan/pi-quiet
 pi install npm:@yceachan/pi-shelld
 pi install npm:@yceachan/pi-switch-cwd
 pi install npm:@yceachan/pi-vision-helper
@@ -39,6 +41,7 @@ pi install npm:@yceachan/pi-wsl-browser
 │   ├── pi-better-mermaid/
 │   ├── pi-codex-imagegen/
 │   ├── pi-gadget/
+│   ├── pi-quiet/
 │   ├── pi-shelld/
 │   ├── pi-switch-cwd/
 │   └── pi-vision-helper/

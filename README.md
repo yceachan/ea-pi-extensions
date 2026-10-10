@@ -12,6 +12,7 @@ A [bun](https://bun.sh) workspace monorepo for [yceachan](https://github.com/yce
 | [`@yceachan/pi-better-mermaid`](packages/pi-better-mermaid) | `better-mermaid` — packages Mermaid guidance as a skill, checks Typora rendering constraints with `mmdc`, and retries syntax errors | [pi.dev](https://pi.dev/packages/@yceachan/pi-better-mermaid) |
 | [`@yceachan/pi-codex-imagegen`](packages/pi-codex-imagegen) | Uses the local Codex login to generate images with `imagegen`; a separately loaded `pi-shelld` shows live logs, status, and runtime | [pi.dev](https://pi.dev/packages/@yceachan/pi-codex-imagegen) |
 | [`@yceachan/pi-gadget`](packages/pi-gadget) | Single-file utilities: `/clear` archives the session, `/exit` quits pi, and `pi-cite-wslpath` converts WSL paths into clickable Windows Terminal links | [pi.dev](https://pi.dev/packages/@yceachan/pi-gadget) |
+| [`@yceachan/pi-quiet`](packages/pi-quiet) | Fork of `@zenspc/pi-quiet`: compact tool rows and verb groups, with the Pi 1.1 renderer resolver fixed | [pi.dev](https://pi.dev/packages/@yceachan/pi-quiet) |
 | [`@yceachan/pi-shelld`](packages/pi-shelld) | `shell_daemon` tool + ⭕shell TUI monitor for session-scoped background shells (servers, watchers); other extensions can discover and reuse its service through `pi.events` | [pi.dev](https://pi.dev/packages/@yceachan/pi-shelld) |
 | [`@yceachan/pi-switch-cwd`](packages/pi-switch-cwd) | `/cwd` — switch the session working directory | [pi.dev](https://pi.dev/packages/@yceachan/pi-switch-cwd) |
 | [`@yceachan/pi-vision-helper`](packages/pi-vision-helper) | Vision helper for models without image input; uses pi-registry or a custom Responses API | [pi.dev](https://pi.dev/packages/@yceachan/pi-vision-helper) |
@@ -26,6 +27,7 @@ A [bun](https://bun.sh) workspace monorepo for [yceachan](https://github.com/yce
 │   ├── pi-better-mermaid/
 │   ├── pi-codex-imagegen/
 │   ├── pi-gadget/
+│   ├── pi-quiet/
 │   ├── pi-shelld/
 │   ├── pi-switch-cwd/
 │   └── pi-vision-helper/
@@ -57,6 +59,7 @@ pi install npm:@yceachan/pi-better-btw
 pi install npm:@yceachan/pi-better-mermaid
 pi install npm:@yceachan/pi-codex-imagegen
 pi install npm:@yceachan/pi-gadget
+pi install npm:@yceachan/pi-quiet
 pi install npm:@yceachan/pi-shelld
 pi install npm:@yceachan/pi-switch-cwd
 pi install npm:@yceachan/pi-vision-helper
