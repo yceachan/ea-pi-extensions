@@ -88,7 +88,7 @@ function initRepo({ release = false } = {}) {
 		);
 		writeFileSync(
 			join(root, "bun.lock"),
-			'["packages/foo"]\n"version": "0.1.0"\n',
+			'{\n  "workspaces": {\n    "packages/foo": {\n      "name": "@yceachan/foo",\n      "version": "0.1.0"\n    }\n  }\n}\n',
 		);
 	}
 	git(root, [
@@ -127,7 +127,15 @@ function makeFakeNpm() {
 		npm,
 		`#!/bin/sh
 printf '%s\\n' "$*" >> "$NPM_LOG"
-if [ "$1" = "whoami" ]; then echo workflow-test; exit 0; fi
+if [ "$1" = "whoami" ]; then
+  if [ "$FAIL_WHOAMI" = "1" ] && [ ! -f "$NPM_AUTH_MARKER" ]; then exit 1; fi
+  echo workflow-test; exit 0
+fi
+if [ "$1" = "login" ]; then
+  echo 'https://www.npmjs.com/login?next=/login/cli/fake-test'
+  if [ "$FAIL_LOGIN" = "1" ]; then exit 1; fi
+  touch "$NPM_AUTH_MARKER"; exit 0
+fi
 case " $* " in
   *" --dry-run "*) echo "npm notice dry-run tarball"; exit 0 ;;
 esac
@@ -455,4 +463,104 @@ test("initial CLI dry-run, non-TTY confirmation, failure recovery, and exact tag
 	} finally {
 		await registry.close();
 	}
+});
+
+function releaseFixtureWithRemote() {
+	const root = initRepo({ release: true });
+	copyScripts(root, ["gbump.mjs"]);
+	git(root, ["add", "scripts/gbump.mjs"]);
+	git(root, ["commit", "-m", "add release entry"]);
+	const remote = mkdtempSync(join(tmpdir(), "version-workflow-remote-"));
+	git(remote, ["init", "--bare"]);
+	git(root, ["remote", "add", "origin", remote]);
+	git(root, ["push", "-u", "origin", "main"]);
+	return { root, remote };
+}
+
+test("gbump batches independent versions into one commit and pushes all exact tags", async () => {
+	const { root, remote } = releaseFixtureWithRemote();
+	mkdirSync(join(root, "packages", "bar"), { recursive: true });
+	writeFileSync(join(root, "packages", "bar", "package.json"), JSON.stringify({ name: "@yceachan/bar", version: "0.1.0" }));
+	writeFileSync(join(root, "bun.lock"), JSON.stringify({ workspaces: {
+		"packages/foo": { name: "@yceachan/foo", version: "0.1.0" },
+		"packages/bar": { name: "@yceachan/bar", version: "0.1.0" },
+	} }, null, 2));
+	for (const [pkg, version] of [["foo", "0.1.1"], ["bar", "0.2.0"]]) {
+		mkdirSync(join(root, "changelog", pkg, `v${version}`), { recursive: true });
+		writeFileSync(join(root, "changelog", pkg, `v${version}`, "log.md"), `# ${pkg}\n- meaningful change\n`);
+	}
+	git(root, ["add", "packages", "changelog", "bun.lock"]);
+	git(root, ["commit", "-m", "prepare batch"]);
+	const before = git(root, ["rev-parse", "HEAD"]);
+	const registry = await registryServer({ "0.1.0": {} });
+	const env = { NPM_CONFIG_REGISTRY: registry.url };
+	try {
+		const args = ["scripts/gbump.mjs", "-p", "foo", "--patch", "-p", "bar", "--minor"];
+		const dry = await commandAsync(root, "bun", [...args, "--dry-run"], env);
+		assert.equal(dry.status, 0, dry.output);
+		assert.match(dry.output, /release: foo@0\.1\.1, bar@0\.2\.0/);
+		assert.equal(git(root, ["rev-parse", "HEAD"]), before);
+		assert.equal(git(root, ["status", "--porcelain"]), "");
+		assert.equal(git(root, ["tag", "--list"]), "");
+		const released = await commandAsync(root, "bun", args, env);
+		assert.equal(released.status, 0, released.output);
+		const head = git(root, ["rev-parse", "HEAD"]);
+		assert.equal(git(root, ["rev-list", "--count", `${before}..HEAD`]), "1");
+		assert.equal(git(root, ["log", "-1", "--format=%s"]), "release: foo@0.1.1, bar@0.2.0");
+		for (const tag of ["foo@0.1.1", "bar@0.2.0"]) {
+			assert.equal(git(root, ["rev-parse", tag]), head);
+			assert.equal(git(remote, ["rev-parse", tag]), head);
+		}
+		assert.equal(git(remote, ["rev-parse", "main"]), head);
+		assert.equal(git(root, ["status", "--porcelain"]), "");
+		const lock = JSON.parse(readFileSync(join(root, "bun.lock"), "utf8"));
+		assert.equal(lock.workspaces["packages/foo"].version, "0.1.1");
+		assert.equal(lock.workspaces["packages/bar"].version, "0.2.0");
+	} finally { await registry.close(); }
+});
+
+test("gbump rejects missing modes, duplicate scopes, mixed initial batches, and regular login", () => {
+	const { root } = releaseFixtureWithRemote();
+	for (const [args, error] of [
+		[["-p", "foo", "-p", "bar", "--patch"], /missing release mode/],
+		[["-p", "foo", "--patch", "-p", "foo", "--minor"], /listed twice/],
+		[["-p", "foo", "--initial", "-p", "bar", "--patch"], /initial is exclusive/],
+		[["-p", "foo", "--patch", "--login"], /login requires --initial/],
+		[["-p", "--patch"], /requires a package name/],
+	]) {
+		const rejected = command(root, "bun", ["scripts/gbump.mjs", ...args]);
+		assert.notEqual(rejected.status, 0);
+		assert.match(rejected.output, error);
+		assert.equal(git(root, ["status", "--porcelain"]), "");
+		assert.equal(git(root, ["tag", "--list"]), "");
+	}
+});
+
+test("initial web login prints developer links; dry-run never authenticates", async () => {
+	const { root, remote } = releaseFixtureWithRemote();
+	const registry = await registryServer(null);
+	const bin = makeFakeNpm();
+	const logPath = join(bin, "calls.log");
+	const env = { NPM_CONFIG_REGISTRY: registry.url, PATH: `${bin}:${process.env.PATH}`,
+		NPM_LOG: logPath, FAIL_WHOAMI: "1", NPM_AUTH_MARKER: join(bin, "auth-marker") };
+	const args = ["scripts/gbump.mjs", "-p", "foo", "--initial", "--login", "--yes"];
+	try {
+		const dry = await commandAsync(root, "bun", [...args, "--dry-run"], env);
+		assert.notEqual(dry.status, 0);
+		assert.match(dry.output, /Dry-run never logs in/);
+		assert.doesNotMatch(readFileSync(logPath, "utf8"), /login/);
+		assert.equal(git(root, ["tag", "--list"]), "");
+		const failedLogin = await commandAsync(root, "bun", args, { ...env, FAIL_LOGIN: "1" });
+		assert.notEqual(failedLogin.status, 0);
+		assert.match(failedLogin.output, /npm login.*failed/);
+		assert.equal(git(root, ["tag", "--list"]), "");
+		const released = await commandAsync(root, "bun", args, env);
+		assert.equal(released.status, 0, released.output);
+		assert.match(released.output, /https:\/\/www\.npmjs\.com\/login\?next=/);
+		assert.match(released.output, /https:\/\/www\.npmjs\.com\/package\/@yceachan\/foo\/access/);
+		assert.match(released.output, /workflow=publish\.yml/);
+		assert.match(released.output, /\/releases\/tag\/foo%400\.1\.0/);
+		assert.match(readFileSync(logPath, "utf8"), /login --auth-type=web --browser=false/);
+		assert.equal(git(remote, ["tag", "--list"]), "foo@0.1.0");
+	} finally { await registry.close(); }
 });

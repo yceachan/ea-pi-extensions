@@ -25,7 +25,7 @@ const HELP = `mono-release — 逐包发版仪式
 用法:
   bun scripts/mono-release.mjs <pkg> patch|minor|major [<pkg> <bump> ...]
   bun scripts/mono-release.mjs <pkg> --set-ver X.Y.Z [--dry-run]
-  bun scripts/mono-release.mjs <pkg> --initial [--dry-run] [--yes]
+  bun scripts/mono-release.mjs <pkg> --initial [--login] [--dry-run] [--yes]
 
 模式:
   regular  从 registry 基线推进版本，写 manifest/bun.lock、创建 release commit 与 tag
@@ -33,7 +33,7 @@ const HELP = `mono-release — 逐包发版仪式
 
 initial 守卫与执行:
   clean tree → README 同步 → changelog 有实质条目 → registry/tag 状态可判定 →
-  npm whoami → npm publish --access public --dry-run → 确认完整 tag →
+  npm whoami（--login 可打印 web 授权链接，dry-run 不登录）→ tarball 干跑 → 确认完整 tag →
   tag → npm publish → git push → git push origin <exact-tag>
   非 TTY 实发必须给 --yes；--dry-run 永不创建 tag、publish 或 push。
 `;
@@ -97,7 +97,8 @@ function run(command, commandArgs, cwd = root) {
 
 const dryRun = args.includes("--dry-run");
 const yes = args.includes("--yes") || args.includes("-y");
-const items = args.filter((arg) => !["--dry-run", "--yes", "-y"].includes(arg));
+const login = args.includes("--login");
+const items = args.filter((arg) => !["--dry-run", "--yes", "-y", "--login"].includes(arg));
 const specs = [];
 for (let index = 0; index < items.length; ) {
 	const pkg = items[index];
@@ -127,6 +128,7 @@ if (
 ) {
 	fail("--initial is exclusive and releases exactly one package");
 }
+if (login && initialSpecs.length === 0) fail("--login requires --initial");
 if (yes && initialSpecs.length === 0) {
 	console.warn("⚠ --yes has no release-confirmation effect outside --initial");
 }
@@ -253,6 +255,16 @@ function remoteTagState(tag, head) {
 	return oid === head ? "head" : "other";
 }
 
+function printInitialLinks(plan) {
+	const repo = "https://github.com/yceachan/ea-pi-extensions";
+	console.log(`  npm package: https://www.npmjs.com/package/${plan.json.name}`);
+	console.log(`  Trusted Publisher settings: https://www.npmjs.com/package/${plan.json.name}/access`);
+	console.log("  GitHub publisher: user=yceachan, repository=ea-pi-extensions, workflow=publish.yml");
+	console.log("  设置页选择 GitHub Actions，并允许 npm publish；不会自动修改账号安全设置。");
+	console.log(`  CI: ${repo}/actions/workflows/publish.yml`);
+	console.log(`  Release: ${repo}/releases/tag/${encodeURIComponent(plan.tag)}`);
+}
+
 async function runInitial(plan) {
 	const notes = requireChangelog(plan);
 	const registry = await registryBaseline(`@yceachan/${plan.pkg}`);
@@ -285,13 +297,20 @@ async function runInitial(plan) {
 	);
 	console.log("─".repeat(60));
 
-	const whoami = spawnSync("npm", ["whoami"], {
+	printInitialLinks(plan);
+	let whoami = spawnSync("npm", ["whoami"], {
 		cwd: plan.packageDir,
 		stdio: "inherit",
 	});
+	if (whoami.status !== 0 && login && !dryRun) {
+		console.log("→ npm login --auth-type=web --browser=false");
+		console.log("请打开 npm 在终端打印的授权链接；登录和 2FA 由开发者本人完成。");
+		run("npm", ["login", "--auth-type=web", "--browser=false"], plan.packageDir);
+		whoami = spawnSync("npm", ["whoami"], { cwd: plan.packageDir, stdio: "inherit" });
+	}
 	if (whoami.status !== 0) {
 		fail(
-			"npm authentication failed before any tag write. Run npm login, then npm whoami, and retry.",
+			`npm authentication failed before any tag write. Run npm login --auth-type=web --browser=false, or retry ./gbump -p ${plan.pkg} --initial --login. Dry-run never logs in.`,
 		);
 	}
 
@@ -334,6 +353,7 @@ async function runInitial(plan) {
 		const publish = spawnSync("npm", ["publish", "--access", "public"], {
 			cwd: plan.packageDir,
 			stdio: "inherit",
+			env: { ...process.env, NPM_CONFIG_BROWSER: "false" },
 		});
 		if (publish.status !== 0) {
 			fail(
@@ -364,6 +384,7 @@ async function runInitial(plan) {
 	console.log(
 		`✓ Initial release complete: ${plan.tag}. Tag CI may now create the Release page.`,
 	);
+	printInitialLinks(plan);
 }
 
 async function runRegular(releasePlans) {
@@ -433,6 +454,12 @@ async function runRegular(releasePlans) {
 		}
 	}
 	if (failed) process.exit(1);
+	const branch = captureOptional("git", ["symbolic-ref", "--quiet", "--short", "HEAD"]);
+	if (!branch) fail("regular release requires a branch, not detached HEAD");
+	const head = capture("git", ["rev-parse", "HEAD"]);
+	for (const plan of releasePlans) {
+		if (remoteTagState(plan.tag, head) !== "absent") fail(`remote tag already exists: ${plan.tag}`);
+	}
 
 	console.log("─".repeat(60));
 	for (const plan of releasePlans) {
@@ -466,8 +493,10 @@ async function runRegular(releasePlans) {
 	]);
 	run("git", ["commit", "-m", commitMessage]);
 	for (const plan of releasePlans) run("git", ["tag", plan.tag]);
-	run("git", ["push"]);
-	for (const plan of releasePlans) run("git", ["push", "origin", plan.tag]);
+	run("git", [
+		"push", "--atomic", "origin", `HEAD:refs/heads/${branch}`,
+		...releasePlans.map((plan) => `refs/tags/${plan.tag}`),
+	]);
 	console.log(
 		`✓ Released ${releasePlans.map((plan) => plan.tag).join(", ")}. CI will publish each tag.`,
 	);

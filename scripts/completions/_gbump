@@ -34,16 +34,17 @@ _gbump() {
 
 	if [[ $service == gbump ]]; then
 		flags=(
-			'(--minor --major --set-ver --initial)--patch[bump patch version]'
-			'(--patch --major --set-ver --initial)--minor[bump minor version]'
-			'(--patch --minor --set-ver --initial)--major[bump major version]'
-			'(--patch --minor --major --initial)--set-ver[set explicit target version (X.Y.Z)]:version:_message'
+			'*--patch[bump patch version for current package]'
+			'*--minor[bump minor version for current package]'
+			'*--major[bump major version for current package]'
+			'*--set-ver[set current package target version (X.Y.Z)]:version:_message'
 			'(--patch --minor --major --set-ver)--initial[publish the manifest current version for the first time]'
+			'--login[initial: print npm web authorization link when logged out]'
 			'--dry-run[validate all guards and print the plan without writing]'
 			'(-y --yes)'{-y,--yes}'[accept a unique fuzzy scope and authorize non-TTY initial publish]'
 			# gbump 只认 -p，不接受 --scope。spec 必须恒常存在，
 			# _arguments 才能识别 -p 带参数并在其参数位分发 ->pkg。
-			'-p[package scope (fuzzy match supported)]:package scope:->pkg'
+			'*-p[package scope (repeat for a batch)]:package scope:->pkg'
 		)
 	else
 		flags=(

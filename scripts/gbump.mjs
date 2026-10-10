@@ -36,21 +36,24 @@ const HELP = `${heading("gbump")} — package 发布工具
 
 ${heading("用法")}
   ${command("./gbump")} ${option("-p")} ${value("<package>")} (${option("--patch | --minor | --major | --set-ver")} ${value("<X.Y.Z>")}) [${option("--dry-run")}]
-  ${command("./gbump")} ${option("-p")} ${value("<package>")} ${option("--initial")} [${option("--dry-run | --yes")}]
+  ${command("./gbump")} ${option("-p")} ${value("<package>")} ${option("--initial")} [${option("--login")}] [${option("--dry-run | --yes")}]
+  ${command("./gbump")} ${option("-p")} ${value("<pkg>")} ${option("--minor -p")} ${value("<pkg>")} ${option("--patch")} [${option("--dry-run")}]
 
 ${heading("示例")}
   ${command("./gbump -p pi-gadget --patch --dry-run")}
   ${command("./gbump -p pi-gadget --set-ver 0.5.0")}
   ${command("./gbump -p pi-new --initial --dry-run")}
-  ${command("./gbump -p pi-new --initial")}
+  ${command("./gbump -p pi-new --initial --login")}
+  ${command("./gbump -p pi-gadget --minor -p pi-shelld --patch")}
 
 ${heading("参数")}
-  ${option("-p")} ${value("<package>")}          package 名；支持模糊匹配
+  ${option("-p")} ${value("<package>")}          package 名；可重复，每包独立指定版本模式
   ${option("--patch")}               patch 版本
   ${option("--minor")}               minor 版本
   ${option("--major")}               major 版本
   ${option("--set-ver")} ${value("<X.Y.Z>")}    指定版本
-  ${option("--initial")}             发布 manifest 当前版本
+  ${option("--initial")}             发布 manifest 当前版本（仅单包）
+  ${option("--login")}               initial 缺少登录时打印 npm 浏览器授权链接
   ${option("--dry-run")}             运行检查，不写入
   ${option("-y, --yes")}             接受唯一模糊匹配；授权非 TTY initial 发布
   ${option("-h, --help")}            显示帮助
@@ -59,6 +62,7 @@ ${heading("规则")}
   - regular 发布要求 registry 基线；新 package 使用 ${option("--initial")}。
   - 发布要求 clean worktree 和有效 changelog。
   - initial 在 TTY 输入完整 tag；非 TTY 使用 ${option("--yes")}。
+  - 多包共用一个 release commit；commit 和 tag 一次 atomic push。
 
 ${heading("退出码")}  ${value("0")} 成功  ${value("1")} 失败
 `;
@@ -84,61 +88,70 @@ function warn(msg) {
 }
 
 // ── gbump flags → mono-release positional args ────────────────────────────
-let pkg = null;
+const specs = [];
+let current = { pkg: null, mode: null, setVer: null };
 let dryRun = false;
 let yes = false;
-let mode = null; // "patch" | "minor" | "major" | "set-ver" | "initial"
-let setVer = null;
+let login = false;
 
 for (let i = 0; i < args.length; i++) {
 	const a = args[i];
 	if (a === "-p") {
-		if (pkg !== null) fail("duplicate -p");
-		if (i + 1 >= args.length) fail("-p requires a package name");
-		pkg = args[++i];
+		if (i + 1 >= args.length || args[i + 1].startsWith("-"))
+			fail("-p requires a package name");
+		if (current.pkg !== null) {
+			specs.push(current);
+			current = { pkg: null, mode: null, setVer: null };
+		}
+		current.pkg = args[++i];
 	} else if (a === "--dry-run") {
 		dryRun = true;
 	} else if (a === "-y" || a === "--yes") {
 		yes = true;
+	} else if (a === "--login") {
+		login = true;
 	} else if (
 		a === "--patch" ||
 		a === "--minor" ||
 		a === "--major" ||
 		a === "--initial"
 	) {
-		if (mode !== null) fail(`conflicting version flags (already ${mode})`);
-		mode = a.slice(2);
+		if (current.mode !== null) fail(`conflicting version flags (already ${current.mode})`);
+		current.mode = a.slice(2);
 	} else if (a === "--set-ver") {
-		if (mode !== null) fail(`conflicting version flags (already ${mode})`);
-		if (i + 1 >= args.length)
+		if (current.mode !== null) fail(`conflicting version flags (already ${current.mode})`);
+		if (i + 1 >= args.length || args[i + 1].startsWith("-"))
 			fail("--set-ver requires a version: --set-ver X.Y.Z");
-		setVer = args[++i];
-		mode = "set-ver";
+		current.setVer = args[++i];
+		current.mode = "set-ver";
 	} else {
 		fail(`unknown argument: ${a}`);
 	}
 }
-if (pkg === null) fail("-p <package> is required");
-if (mode === null)
-	fail(
-		"missing release mode: --patch | --minor | --major | --set-ver <X.Y.Z> | --initial",
-	);
+specs.push(current);
+for (const spec of specs) {
+	if (spec.pkg === null) fail("-p <package> is required");
+	if (spec.mode === null) fail(`missing release mode after ${spec.pkg}`);
+}
+const initial = specs.some((spec) => spec.mode === "initial");
+if (initial && specs.length !== 1) fail("--initial is exclusive and releases exactly one package");
+if (login && !initial) fail("--login requires --initial");
 
-// -p 模糊解析（与 gcm -p 同一份实现）→ 解析出完整包名后再委托 mono-release；
-// mono-release 保持精确匹配（批式位置参数 CLI，模糊化会让多包解析歧义）。
-pkg = await resolvePackageScope(pkg, { root, yes, fail, warn });
-
-let releaseArgs;
-if (mode === "set-ver") releaseArgs = ["--set-ver", setVer];
-else if (mode === "initial") releaseArgs = ["--initial"];
-else releaseArgs = [mode];
-
-const mArgs = [
-	pkg,
-	...releaseArgs,
-	...(dryRun ? ["--dry-run"] : []),
-	...(yes && mode === "initial" ? ["--yes"] : []),
-];
+// Resolve every scope before delegating once: one batch, one release commit.
+const mArgs = [];
+const seen = new Set();
+for (const spec of specs) {
+	const pkg = await resolvePackageScope(spec.pkg, { root, yes, fail, warn });
+	if (seen.has(pkg)) fail(`package listed twice: ${pkg}`);
+	seen.add(pkg);
+	mArgs.push(pkg);
+	if (spec.mode === "set-ver") mArgs.push("--set-ver", spec.setVer);
+	else if (spec.mode === "initial") mArgs.push("--initial");
+	else mArgs.push(spec.mode);
+}
+if (dryRun) mArgs.push("--dry-run");
+if (yes && initial) mArgs.push("--yes");
+if (login) mArgs.push("--login");
 const res = spawnSync("bun", ["scripts/mono-release.mjs", ...mArgs], {
 	cwd: root,
 	stdio: "inherit",
