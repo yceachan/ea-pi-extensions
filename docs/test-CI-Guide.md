@@ -92,7 +92,7 @@ bun 以**该 package 目录**为 cwd 执行其 workspace 脚本，包内脚本�
 
 ## CI 结构
 
-[ci.yml](../.github/workflows/ci.yml) 双 job，均为 `persist-credentials: false` + SHA 锁定的 setup-bun（1.3.14）；`test` job 另以 SHA 锁定的 setup-uv（uv 0.12.3）提供运行时测试依赖：
+[ci.yml](../.github/workflows/ci.yml) 双 job，均为 `persist-credentials: false` + SHA 锁定的 setup-bun（1.4.2）；`test` job 另以 SHA 锁定的 setup-uv（uv 0.12.3）提供运行时测试依赖：
 
 | job | 步骤 |
 | --- | --- |
