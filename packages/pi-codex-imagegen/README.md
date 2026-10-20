@@ -6,13 +6,12 @@ the locally authenticated Codex CLI and its built-in `imagegen` capability.
 Codex runs in an isolated temporary directory through the
 [`@yceachan/pi-shelld`](https://www.npmjs.com/package/@yceachan/pi-shelld) extension.
 The ⭕shell monitor shows its live status, runtime, and log while the main agent keeps
-working. pi-codex-imagegen declares pi-shelld as a runtime dependency, so npm installation
-brings in a compatible version. Pi still loads extension resources explicitly, so pi-shelld
-must also be enabled as a Pi package or passed with a separate `-e` during local development.
+working. Install and load both extensions independently in the same Pi process;
+pi-codex-imagegen discovers pi-shelld through its versioned `pi.events` service channel.
 
 ## Install
 
-Install pi-codex-imagegen and enable its pi-shelld dependency as a Pi extension:
+Install both Pi extensions:
 
 ```bash
 pi install npm:@yceachan/pi-shelld
