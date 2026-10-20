@@ -42,7 +42,7 @@
     },
     "packages/pi-codex-imagegen": {
       "name": "@yceachan/pi-codex-imagegen",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "devDependencies": {
         "@earendil-works/pi-coding-agent": "^0.84.2",
         "@types/node": "^24.0.0",
@@ -123,7 +123,7 @@
     },
     "packages/pi-wsl-browser": {
       "name": "@yceachan/pi-wsl-browser",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "bin": {
         "pi-wsl-browser": "bin/pi-wsl-browser",
       },
