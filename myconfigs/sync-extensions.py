@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""将 pi list 中的 npm 与 mono 本地包导出为可重装的 npm 命令。"""
+"""同步 Pi 扩展安装清单、全局 AGENTS.md 与通用技能。"""
 
 import argparse
 import json
@@ -7,12 +7,14 @@ import os
 from pathlib import Path
 import re
 import shlex
+import shutil
 import subprocess
 import tempfile
 
 
 TARGET = 'myconfigs/extension_setup.sh'
-COMMIT_MESSAGE = 'chore(root): sync Pi extension setup'
+TARGETS = (TARGET, 'myconfigs/AGENTS.md', 'myconfigs/skills')
+COMMIT_MESSAGE = 'chore(root): sync agent configs'
 PACKAGE_NAME = re.compile(r'(?:@[a-z0-9._-]+/)?[a-z0-9._-]+')
 
 
@@ -68,7 +70,24 @@ def render(listing, mono):
     )
 
 
-def sync(repo, content):
+def snapshot(repo, content, prompt, skills):
+    destination = repo / 'myconfigs'
+    destination.mkdir(exist_ok=True)
+    # 先完整读取所有来源；缺失来源或失效的技能链接会使任务失败。
+    with tempfile.TemporaryDirectory(prefix='.config-sync-', dir=destination) as staging:
+        stage = Path(staging)
+        shutil.copyfile(prompt, stage / 'AGENTS.md')
+        shutil.copytree(skills, stage / 'skills', symlinks=False)
+        (stage / 'extension_setup.sh').write_text(content)
+        (stage / 'extension_setup.sh').chmod(0o755)
+        for name in ('extension_setup.sh', 'AGENTS.md'):
+            (stage / name).replace(destination / name)
+        if (destination / 'skills').exists():
+            shutil.rmtree(destination / 'skills')
+        (stage / 'skills').replace(destination / 'skills')
+
+
+def sync(repo, content, prompt, skills):
     if run('git', 'rev-parse', '--show-toplevel', cwd=repo) != str(repo):
         raise ValueError('--repo 必须指向 Git 仓库根目录')
     branch = run('git', 'branch', '--show-current', cwd=repo)
@@ -84,33 +103,25 @@ def sync(repo, content):
     pending = run('git', 'rev-list', f'{upstream}..HEAD', cwd=repo).splitlines()
     for commit in pending:
         subject = run('git', 'show', '-s', '--format=%s', commit, cwd=repo)
-        files = run('git', 'diff-tree', '--no-commit-id', '--name-only', '-r', commit, cwd=repo)
-        if subject != COMMIT_MESSAGE or files != TARGET:
+        files = run('git', 'diff-tree', '--no-commit-id', '--name-only', '-z', '-r', commit, cwd=repo).split('\0')
+        files = [path for path in files if path]
+        if subject != COMMIT_MESSAGE or not files or not all(
+            path in TARGETS[:2] or path.startswith('myconfigs/skills/') for path in files
+        ):
             raise ValueError(f'存在其他待推送提交 {commit}，请先手动处理')
     run('git', 'merge', '--ff-only', upstream, cwd=repo)
 
-    target = repo / TARGET
-    target.parent.mkdir(exist_ok=True)
-    if not target.exists() or target.read_text() != content:
-        with tempfile.NamedTemporaryFile(mode='w', dir=target.parent, prefix='.extension-setup-', delete=False) as file:
-            temporary = Path(file.name)
-            try:
-                file.write(content)
-                file.flush()
-                temporary.chmod(0o755)
-                temporary.replace(target)
-            finally:
-                temporary.unlink(missing_ok=True)
-    changed = subprocess.run(['git', 'diff', '--quiet', 'HEAD', '--', TARGET], cwd=repo)
-    if changed.returncode not in (0, 1):
-        changed.check_returncode()
-    if changed.returncode == 1 or run('git', 'ls-files', '--others', '--exclude-standard', '--', TARGET, cwd=repo):
-        run('git', 'add', '--', TARGET, cwd=repo)
-        print(run('./gcm', '-t', 'chore', '-p', 'root', '-m', 'sync Pi extension setup', '--allow-dirty', cwd=repo))
+    snapshot(repo, content, prompt, skills)
+    tracked = run('git', 'diff', '--name-only', '-z', 'HEAD', '--', *TARGETS, cwd=repo)
+    untracked = run('git', 'ls-files', '--others', '--exclude-standard', '-z', '--', *TARGETS, cwd=repo)
+    changed = sorted({path for path in (tracked + untracked).split('\0') if path})
+    if changed:
+        run('git', 'add', '-A', '--', *changed, cwd=repo)
+        print(run('./gcm', '-t', 'chore', '-p', 'root', '-m', 'sync agent configs', '--allow-dirty', cwd=repo))
     if run('git', 'rev-list', f'{upstream}..HEAD', cwd=repo):
         print(run('git', 'push', remote, f'HEAD:{remote_ref}', cwd=repo))
     else:
-        print('扩展清单未变化，无需提交或推送。')
+        print('配置未变化，无需提交或推送。')
 
 
 def main():
@@ -124,7 +135,7 @@ def main():
     if args.print:
         print(content, end='')
     else:
-        sync(repo, content)
+        sync(repo, content, Path.home() / '.codex/AGENTS.md', Path.home() / '.agents/skills')
 
 
 if __name__ == '__main__':
