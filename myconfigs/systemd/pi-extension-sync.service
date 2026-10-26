@@ -1,0 +1,11 @@
+[Unit]
+Description=Sync Pi extension setup to mono/myconfigs and push chore commits
+After=network-online.target
+
+[Service]
+Type=oneshot
+Environment=PATH=%h/.bun/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=GIT_TERMINAL_PROMPT=0
+WorkingDirectory=%h
+ExecStart=/usr/bin/python3 %h/work/pi-agent-harness/mono/myconfigs/sync-extensions.py
+TimeoutStartSec=5min

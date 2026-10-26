@@ -1,0 +1,11 @@
+[Unit]
+Description=Sync Pi extension setup every day at midnight
+
+[Timer]
+OnCalendar=*-*-* 00:00:00 Asia/Singapore
+AccuracySec=1s
+Persistent=true
+Unit=pi-extension-sync.service
+
+[Install]
+WantedBy=timers.target
