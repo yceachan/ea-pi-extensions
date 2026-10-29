@@ -18,7 +18,8 @@ export interface PromptPackManifest {
   };
 }
 
-/** Fully resolved prompt texts after manifest resolution + file reads. */
+/** Resolved texts. framing/focusAnchor/preamble/failedNote form one initialization;
+ * base is a tool-boundary error and escalated is UI-only stop feedback. */
 export interface PromptPack {
   framing: string;
   focusAnchor: string;

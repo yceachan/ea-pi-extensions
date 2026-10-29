@@ -134,19 +134,12 @@ interface ChatGeometry {
 }
 
 /**
- * Shared-prefix layout (#9, reverses decision #6): the main lane's system
- * prompt stays in the system slot (verbatim, token-identical request head),
- * and the fork snapshot is injected verbatim below it — main and btw share
- * the gateway's cached prefix. The btw identity/instruction texts live in
- * the prompt pack (framing block message + per-turn focus anchor).
+ * Keep the main system and fork snapshot before one side-chat initialization.
+ * Later requests only append real conversation messages. Cross-lane cache
+ * reuse additionally depends on matching tools and provider cache settings.
  */
 
-// --- Lane enforcement (prototype for #8, texts from the prompt pack #13) ---
-// Trigger points only: transformContext (reminder injection) / beforeToolCall
-// (block reason) / afterToolCall (failed-note). UI copy stays in code.
-
 const LANE_BLOCKED_STATUS = "🚧 lane blocked";
-const PRE_ABORT_TEXT = "Turn stopped after repeated out-of-lane attempts.";
 
 const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
@@ -192,10 +185,6 @@ export class SideChatOverlay implements Component, Focusable {
   private readOnlyToolNames = new Set<string>();
   /** Out-of-lane attempts in the current turn (reset on each new user message). */
   private laneViolations = 0;
-  /** Reminder queued for injection by transformContext before the next LLM call. */
-  private pendingReminder: string | null = null;
-  /** When true, the turn is aborted right after the escalated reminder is injected. */
-  private abortAfterInject = false;
 
   /**
    * Screen rectangle occupied by the overlay (0-based), used to route mouse
@@ -486,15 +475,17 @@ export class SideChatOverlay implements Component, Focusable {
       this.buildReadOnlyTools().map((t) => t.name),
     );
 
-    // Framing block (#9): between the cite and the user's first btw message.
-    // User-role fallback placement (#11) — the request path keeps only
-    // user/assistant/toolResult roles (convertToLlm + openai-completions
-    // buildRequest), so trailing-system placement is not reachable through
-    // the standard pipeline (ADR-0001 prototype implementation note). The
-    // message is marked so the render path never shows it as a chat bubble.
+    // Persist initialization once, after the snapshot and before the first
+    // real side-chat question. Never append internal user messages after a
+    // question or tool result. Mark it for collapsed display and export.
     const framingMessage = markFramingMessage({
       role: "user",
-      content: substituteTemplate(promptPack.framing, {
+      content: substituteTemplate([
+        promptPack.framing,
+        promptPack.focusAnchor,
+        promptPack.laneReminders.preamble,
+        promptPack.laneReminders.failedNote,
+      ].filter(Boolean).join("\n\n"), {
         cwd: forkContext.cwd,
         model: forkContext.model.id,
       }),
@@ -506,8 +497,7 @@ export class SideChatOverlay implements Component, Focusable {
       // models; the global compatibility streamer cannot resolve virtual models.
       streamFn: (model, context, options) => modelRegistry.streamSimple(model, context, options),
       initialState: {
-        // Shared-prefix layout (#9): the MAIN persona stays in the system
-        // slot so the request head matches the main lane token-for-token.
+        // Preserve the original head rather than folding side-chat rules into it.
         systemPrompt: forkContext.systemPrompt,
         model: forkContext.model,
         thinkingLevel: forkContext.thinkingLevel,
@@ -515,45 +505,8 @@ export class SideChatOverlay implements Component, Focusable {
         messages: [...forkedMessages, framingMessage],
       },
       convertToLlm,
-      // Transient tail injections (present in the LLM request only, never
-      // stored in the transcript), texts from the prompt pack:
-      // - focus anchor: every turn, both modes (recency position);
-      // - lane preamble: read-only lane only (full mode stays untouched);
-      // - pending lane reminder: after an out-of-lane attempt; escalated
-      //   violations abort the turn right after the reminder is queued.
-      transformContext: async (messages) => {
-        const additions: AgentMessage[] = [
-          {
-            role: "user",
-            content: promptPack.focusAnchor,
-            timestamp: Date.now(),
-          },
-        ];
-        if (this.toolMode === "read-only") {
-          additions.push({
-            role: "user",
-            content: promptPack.laneReminders.preamble,
-            timestamp: Date.now(),
-          });
-        }
-        if (this.pendingReminder) {
-          const reminder = this.pendingReminder;
-          this.pendingReminder = null;
-          if (this.abortAfterInject) {
-            this.abortAfterInject = false;
-            this.messages.setErrorContent(PRE_ABORT_TEXT);
-            setTimeout(() => this.agent.abort(), 0);
-          }
-          additions.push({
-            role: "user",
-            content: reminder,
-            timestamp: Date.now(),
-          });
-        }
-        return [...messages, ...additions];
-      },
-      // Belt-and-braces: block any residual present-but-disallowed tool with
-      // the base reminder as the reason (blocked calls never reach afterToolCall).
+      finishTurn: () => this.laneViolations >= 2 ? { action: "end" } : undefined,
+      // Permissions are enforced at the tool boundary, not by synthetic users.
       beforeToolCall: async (ctx) => {
         if (this.toolMode !== "read-only") return undefined;
         if (this.readOnlyToolNames.has(ctx.toolCall.name)) return undefined;
@@ -563,19 +516,6 @@ export class SideChatOverlay implements Component, Focusable {
             tool: ctx.toolCall.name,
           }),
         };
-      },
-      // Layer 2: re-ground executed-but-failed read-only calls (never fires
-      // for blocked/absent tools). Not a violation — no escalation count.
-      afterToolCall: async (ctx) => {
-        if (this.toolMode !== "read-only" || !ctx.isError) return undefined;
-        const content = [...ctx.result.content];
-        if (!content.some((c) => c.type === "text" && c.text.includes("🚧"))) {
-          content.push({
-            type: "text",
-            text: promptPack.laneReminders.failedNote,
-          });
-        }
-        return { content };
       },
     });
 
@@ -697,32 +637,21 @@ export class SideChatOverlay implements Component, Focusable {
     ];
   }
 
-  /**
-   * 1st violation → base reminder; 2nd → escalated wording + turn abort.
-   * Texts come from the prompt pack (#13); the reminder is injected by
-   * transformContext before the next LLM call.
-   */
+  /** Actual unavailable-tool calls get UI feedback; a repeat stops this turn. */
   private registerLaneViolation(toolName: string) {
     this.laneViolations += 1;
     // Stop the spinner first: the lane-blocked status would otherwise be
     // overwritten by the 80ms spinner tick.
     this.stopSpinner();
     if (this.laneViolations === 1) {
-      this.pendingReminder = substituteTemplate(
-        this.options.promptPack.laneReminders.base,
-        { tool: toolName },
-      );
       this.messages.setToolStatus(LANE_BLOCKED_STATUS);
     } else {
-      this.pendingReminder = substituteTemplate(
+      this.messages.setErrorContent(substituteTemplate(
         this.options.promptPack.laneReminders.escalated,
-        {
-          tool: toolName,
-          count: this.laneViolations,
-        },
-      );
-      this.abortAfterInject = true;
-      this.messages.setToolStatus(`${LANE_BLOCKED_STATUS} — escalating`);
+        { tool: toolName, count: this.laneViolations },
+      ));
+      this.messages.setToolStatus(`${LANE_BLOCKED_STATUS} — stopped`);
+      this.agent.abort();
     }
     this.options.tui.requestRender();
   }
@@ -799,8 +728,6 @@ export class SideChatOverlay implements Component, Focusable {
 
     // New user message: reset the per-turn lane counter.
     this.laneViolations = 0;
-    this.pendingReminder = null;
-    this.abortAfterInject = false;
 
     this.editor.setText("");
     this.isStreaming = true;

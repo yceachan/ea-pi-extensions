@@ -73,7 +73,7 @@ pi install npm:@yceachan/pi-better-btw
 | `Alt+N` | 销毁当前 session 并开启空白会话 |
 | `Alt+E` | 导出对话记录到 `$CWD/.agents/eval/pi-better-btw-<timestamp>.md` |
 
-在Readonly Mode(default),只读车道是**强制的**：越权调用工具会被硬阻断并注入prompt；第二次违规会升级措辞并中止该轮，提示（`🚧 lane blocked` 状态行）。已执行但失败的只读调用会被 `afterToolCall` 备注再次归位。编辑模式（`Ctrl+T`）不受影响。
+只读模式通过实际工具集合和调用边界校验执行权限限制。调用不可用工具会失败；第二次此类调用停止本轮，并显示 `🚧 lane blocked`。普通读取、搜索失败保留真实错误，可据此重试，不附加权限训诫。`Ctrl+T` 切换编辑模式及其可用能力。
 
 **窥视主线 agent** —— `peek_main` 工具读取主线会话的近期活动。
 
@@ -171,28 +171,28 @@ pi-better-btw 从三个位置按优先级递增读取 `config.json` —— 每�
 
 ### 提示包清单
 
-`promptPack` 把每条注入提示映射到一个 markdown 文件（相对于本层目录，或绝对路径）。所有键均可选——缺失或不可读的键回退到随包的 `prompts/` 默认值（并给出 UI 警告）：
+`promptPack` 把初始化说明及工具边界文本映射到 markdown 文件（相对于本层目录，或绝对路径）。所有键均可选——缺失或不可读的键回退到随包的 `prompts/` 默认值（并给出 UI 警告）。`framing`、`focusAnchor`、`preamble`、`failedNote` 在首个旁路提问前合并为一条持久初始化消息；已有自定义提示文件也应按这种一次性、模式中立的用途编写：
 
-| 键 | 内置默认 | 注入时机 |
+| 键 | 内置默认 | 用途 |
 | -- | -------- | ---- |
-| `promptPack.framing` | `prompts/btw-framing.md` | fork 上下文之后（不作为聊天气泡渲染）——把引用框定为"仅供引用" |
-| `promptPack.focusAnchor` | `prompts/btw-focus-anchor.md` | 每轮——"只回答 btw 最新消息" |
-| `promptPack.laneReminders.base` | `prompts/lane-reminder-base.md` | 第一次只读违规（`{{tool}}` / `{{count}}`） |
-| `promptPack.laneReminders.escalated` | `prompts/lane-reminder-escalated.md` | 第二次违规，中止本轮之前 |
-| `promptPack.laneReminders.failedNote` | `prompts/lane-failed-note.md` | 已执行但失败的只读调用之后 |
-| `promptPack.laneReminders.preamble` | `prompts/lane-preamble.md` | 只读车道开场白 |
+| `promptPack.framing` | `prompts/btw-framing.md` | 初始化：旁路身份与快照边界；支持 `{{cwd}}` / `{{model}}` |
+| `promptPack.focusAnchor` | `prompts/btw-focus-anchor.md` | 初始化：回答最新真实提问，并展示用户要求的工具结果 |
+| `promptPack.laneReminders.base` | `prompts/lane-reminder-base.md` | 工具边界阻断错误；支持 `{{tool}}` |
+| `promptPack.laneReminders.escalated` | `prompts/lane-reminder-escalated.md` | 重复调用不可用工具、停止本轮时的 UI 提示；支持 `{{tool}}` / `{{count}}` |
+| `promptPack.laneReminders.failedNote` | `prompts/lane-failed-note.md` | 初始化：处理具体错误的指引，不再追加到工具输出 |
+| `promptPack.laneReminders.preamble` | `prompts/lane-preamble.md` | 初始化：能力以当前工具表和用户选择的模式为准 |
 
 随包的 `config.json` 只读白名单默认只含官方 pi 工具集合（`web_search`、`source_check`、`fetch_content`、`get_search_content`）；第三方工具（pi-lens、context7、vision 等）通过用户层追加。
 
 ## 工作原理
 
-扩展克隆当前会话上下文，创建带全部扩展工具的独立 agent 实例，并在 TUI 浮层中渲染。打开命令在浮层挂载后即返回，主输入循环继续处理后续命令；UI 交互独立运行，直到宿主会话清理或 `Alt+N` 重建。隐藏保留 agent 和草稿，`Alt+W` 同时保留正在进行的生成。`Alt+N` 中止并销毁旧 session，以记忆的旁路模型和思考设置开启空白会话。
+扩展克隆当前会话上下文，按当前模式的工具集合创建独立 agent 实例，并在 TUI 浮层中渲染。打开命令在浮层挂载后即返回，主输入循环继续处理后续命令；UI 交互独立运行，直到宿主会话清理或 `Alt+N` 重建。隐藏保留 agent 和草稿，`Alt+W` 同时保留正在进行的生成。`Alt+N` 中止并销毁旧 session，以记忆的旁路模型和思考设置开启空白会话。
 
 默认页脚指示器适配公开的 `FooterComponent` 渲染器，不修改已安装的 Pi 文件，也不接管 `setFooter`；扩展退出时恢复渲染器。标准 keyed `setStatus` 在运行中切换自定义页脚时仍然可用。模型行位置依赖 Pi 页脚内部布局，使用真实渲染器回归测试覆盖。
 
 旁路请求走 `modelRegistry.streamSimple`，由 Pi 模型运行时处理认证、请求头和虚拟模型路由。
 
-btw 上下文保留主线的 system prompt 于 system 槽位，并逐字注入 fork 快照，使 btw 请求头成为主线请求的 token 前缀（网关前缀缓存命中）。`forkSurgery`（`srcs/fork-surgery.ts`）让快照的尾部工具交换对网关合法；提示包供给全部注入文本；车道强制在只读模式下包装 `beforeToolCall`/`afterToolCall`（`srcs/side-chat-overlay.ts`）。
+请求布局为：原 system → 主线快照 → 一次性旁路初始化 → 真实旁路提问及对应的 assistant/tool 回复。`forkSurgery`（`srcs/fork-surgery.ts`）修复或裁剪快照尾部的工具交换，保证工具历史可重放。初始化消息固定保存在历史和导出中，问题或工具结果之后不再追加内部伪用户消息。切换只读／编辑模式只改变工具能力，不改写初始化。模型、工具声明、provider 设置和缓存断点匹配时，保留的前缀具备跨主线复用条件；旁路自身也可复用持续增长的历史。
 
 主线 agent 的工具执行事件被跟踪以维护已写文件路径集合（`srcs/file-activity-tracker.ts`）；写类工具被包装以在触碰这些路径前警告（`srcs/tool-wrapper.ts`）。
 

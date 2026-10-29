@@ -10,10 +10,12 @@
 
 ## fix
 
+- Persist one combined side-chat initialization after the main snapshot and before the first real question. Remove per-request user-role reminders and permission notes appended to ordinary tool failures, so successful reads and tool continuations stay focused on the user's task. Preserve actual tool permissions and stop repeated unavailable calls without injecting new user messages.
+
 - Complete `/btw` and `/side` commands when their overlay is mounted rather than when the side-chat session ends. Commands submitted after hiding now dispatch normally, avoiding queued reopenings and repeated close confirmations.
 - Share pending mounts across rapid opens, surface asynchronous UI failures and prevent a pending reset from reopening a chat after host session teardown.
 
 ## chore
 
 - Require Pi 1.4+ for the contributed UI/runtime integrations; retain the regular-mode mouse path.
-- Register lifecycle and quiet-display regressions using Pi's actual submit, extension-command dispatch and custom UI methods with in-memory fullscreen and regular terminals; cover cached/streaming folds, live command toggles and retained quiet settings, and update both READMEs and shortcut help.
+- Register context-layout, lifecycle and quiet-display regressions using Pi's actual submit, extension-command dispatch and custom UI methods with in-memory fullscreen and regular terminals; cover cached/streaming folds, live command toggles and retained quiet settings, and update both READMEs and shortcut help.

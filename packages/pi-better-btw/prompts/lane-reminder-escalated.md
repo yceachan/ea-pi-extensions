@@ -1,1 +1,1 @@
-🚧 You have now attempted out-of-lane tools {{count}} times this turn. Stop trying to write or execute. Answer the latest user message with read-only tools, or report back that you cannot.
+🚧 Turn stopped after {{count}} unavailable-tool calls (latest: `{{tool}}`). Switch modes if the task needs a capability outside the current tool list.

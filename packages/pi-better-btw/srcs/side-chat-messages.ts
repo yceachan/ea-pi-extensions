@@ -33,8 +33,8 @@ function colToCharIndex(plain: string, col: number): number {
 const SELECTION_STYLE = "\x1b[7m";
 const SELECTION_STYLE_END = "\x1b[27m";
 
-// Marker for the framing block message (#9): it lives in the LLM context
-// (user-role fallback placement) but must never render as a chat bubble.
+// One-time side-chat initialization stays in LLM history and exports, but
+// is hidden from the interactive message area.
 const FRAMING_MARKER = Symbol("btw-framing-message");
 
 /** Mark a message as the framing block so the render path skips it. */

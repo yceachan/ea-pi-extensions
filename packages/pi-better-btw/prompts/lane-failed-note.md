@@ -1,1 +1,1 @@
-[btw side chat] That call failed. You are in the read-only lane — retry with read/grep/find/ls, or report back. Do not continue the main lane's work.
+On tool failure, use the returned error to choose a relevant recovery or explain the concrete cause to the user. Reading files and presenting their contents are valid read-only tasks. Keep permission guidance specific to an actual unavailable operation.

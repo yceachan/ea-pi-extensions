@@ -73,7 +73,7 @@ The borderless panel follows the main theme and terminal colors, subtly separate
 | `Alt+N` | Discard the session and start an empty conversation |
 | `Alt+E` | Export the transcript to `$CWD/.agents/eval/pi-better-btw-<timestamp>.md` |
 
-In Read-only Mode (default), the read-only lane is **enforced**: attempting an out-of-lane tool call is hard-blocked with a prompt injection; a second violation escalates the wording and aborts the turn (a `🚧 lane blocked` status line). Executed-but-failed read-only calls are re-grounded by an `afterToolCall` note. Edit mode (`Ctrl+T`) is unaffected.
+Read-only mode is enforced by the available tool set and tool-boundary checks. Calls to unavailable tools fail; a second such call stops the turn with `🚧 lane blocked` feedback. Ordinary read/search failures retain their actual error and can be retried without a permission lecture. `Ctrl+T` changes the available capabilities for edit mode.
 
 **Peek at the main agent** — the `peek_main` tool reads recent activity from the main session.
 
@@ -171,28 +171,28 @@ Example (user or project layer):
 
 ### Prompt pack manifest
 
-`promptPack` maps each injected prompt to a markdown file (relative to the layer's directory, or absolute). All keys are optional — an absent or unreadable key falls back to the bundled `prompts/` default (with a UI warning):
+`promptPack` maps initialization and tool-boundary texts to markdown files (relative to the layer's directory, or absolute). All keys are optional — an absent or unreadable key falls back to the bundled `prompts/` default (with a UI warning). `framing`, `focusAnchor`, `preamble` and `failedNote` are combined into one persisted initialization before the first side-chat question. Existing custom prompt files should describe this one-time, mode-neutral setup:
 
-| Key | Bundled default | Injected |
-|-----|-----------------|----------|
-| `promptPack.framing` | `prompts/btw-framing.md` | after the forked context (never rendered as a chat bubble) — frames the cite as reference-only |
-| `promptPack.focusAnchor` | `prompts/btw-focus-anchor.md` | every turn — "answer only the latest btw message" |
-| `promptPack.laneReminders.base` | `prompts/lane-reminder-base.md` | first read-only-lane violation (`{{tool}}` / `{{count}}`) |
-| `promptPack.laneReminders.escalated` | `prompts/lane-reminder-escalated.md` | second violation, before the turn abort |
-| `promptPack.laneReminders.failedNote` | `prompts/lane-failed-note.md` | after an executed-but-failed read-only call |
-| `promptPack.laneReminders.preamble` | `prompts/lane-preamble.md` | read-only lane preamble |
+| Key | Bundled default | Use |
+|-----|-----------------|-----|
+| `promptPack.framing` | `prompts/btw-framing.md` | initialization: side-chat identity and snapshot boundary; supports `{{cwd}}` / `{{model}}` |
+| `promptPack.focusAnchor` | `prompts/btw-focus-anchor.md` | initialization: answer the latest real question and present requested tool results |
+| `promptPack.laneReminders.base` | `prompts/lane-reminder-base.md` | blocked tool-call error; supports `{{tool}}` |
+| `promptPack.laneReminders.escalated` | `prompts/lane-reminder-escalated.md` | UI feedback when repeated unavailable calls stop a turn; supports `{{tool}}` / `{{count}}` |
+| `promptPack.laneReminders.failedNote` | `prompts/lane-failed-note.md` | initialization: handle concrete errors; never appended to tool output |
+| `promptPack.laneReminders.preamble` | `prompts/lane-preamble.md` | initialization: capabilities follow the current tool list and user-selected mode |
 
 The bundled `config.json` ships the official pi tool set in the read-only allowlist (`web_search`, `source_check`, `fetch_content`, `get_search_content`); third-party tools (pi-lens, context7, vision, …) are added through the user layer.
 
 ## How It Works
 
-The extension clones the current session context, creates a separate agent instance with all extension-registered tools, and renders it in a TUI overlay. Opening commands return as soon as the overlay is mounted, so the main input loop can continue dispatching commands while the chat is visible or hidden. The UI interaction runs independently until session teardown or `Alt+N`. Hiding preserves the agent and draft; `Alt+W` also keeps a running response active. `Alt+N` aborts the old session and opens an empty one with the remembered side-chat model and thinking settings.
+The extension clones the current session context, creates a separate agent instance with the current mode's tool set, and renders it in a TUI overlay. Opening commands return as soon as the overlay is mounted, so the main input loop can continue dispatching commands while the chat is visible or hidden. The UI interaction runs independently until session teardown or `Alt+N`. Hiding preserves the agent and draft; `Alt+W` also keeps a running response active. `Alt+N` aborts the old session and opens an empty one with the remembered side-chat model and thinking settings.
 
 The default-footer badge adapts the exported `FooterComponent` renderer without editing installed Pi files or taking over `setFooter`. It restores the renderer on shutdown. A keyed `setStatus` remains available when custom footers are switched at runtime. Model-row placement depends on Pi footer internals, covered by a real-renderer regression test.
 
 Side-chat requests use `modelRegistry.streamSimple` so Pi's model runtime handles authentication, request headers and virtual-model routing.
 
-The btw context keeps the main lane's system prompt in the system slot and injects the fork snapshot verbatim, so the btw request head is a token prefix of the main request (gateway prefix-cache hits). `forkSurgery` (`srcs/fork-surgery.ts`) makes the trailing tool exchange gateway-legal on the snapshot; the prompt pack supplies all injected prompt text; lane enforcement wraps `beforeToolCall`/`afterToolCall` (`srcs/side-chat-overlay.ts`) in the read-only lane only.
+The request layout is: original system → main-session snapshot → one side-chat initialization → real side-chat questions and their assistant/tool replies. `forkSurgery` (`srcs/fork-surgery.ts`) repairs or cuts the snapshot's trailing exchange for valid tool replay. The initialization stays fixed in history and exports; no internal user messages are appended after questions or tool results. Switching read/edit mode changes tools without rewriting the initialization. The preserved prefix is eligible for cross-lane cache reuse when model, tool declarations, provider settings and cache breakpoints match; the side chat can also reuse its own growing history.
 
 Main-agent tool execution events are tracked to maintain a set of written file paths (`srcs/file-activity-tracker.ts`); write-capable tools are wrapped to warn before touching those paths (`srcs/tool-wrapper.ts`).
 

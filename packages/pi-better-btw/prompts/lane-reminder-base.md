@@ -1,1 +1,1 @@
-🚧 Lane blocked: `{{tool}}` is not available in this side chat. You are the btw side chat — a quick-question lane parallel to the main agent; the main line is the main agent's job. Answer the latest user message only, with read-only tools (read/grep/find/ls + allowlisted tools). If a write is genuinely needed, tell the user to switch to edit mode (Ctrl+T).
+🚧 Tool `{{tool}}` is unavailable in the current side-chat mode. Use the declared tools, or ask the user to switch modes if this task needs that capability.
