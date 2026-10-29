@@ -1,12 +1,16 @@
 ---
 title: ea-pi-extensions 测试与 CI 指南
 tags: [test, ci, bun, monorepo, github-actions]
+note_types: document
 desc: 默认测试入口 bun run test 的编排机制、package 测试注册纪律（scripts.test / scripts.test:e2e）与 CI 结构
+created: 2026-08-30
+updated: 2026-10-21
 
-update: 2026-08-30
 ---
 
 # ea-pi-extensions 测试与 CI 指南
+
+本仓库由根脚本统一编排各包自行注册的测试，以一致的 Bun 版本和已提交锁文件固定安装输入。维护者在本地与 CI 使用相同入口，将纯自动化验证归入默认测试，将真实 Pi、模型和 GUI 场景归入手动 E2E；排查失败时先定位安装、类型检查或测试所在阶段，再处理对应输入。
 
 > [!note]
 > **Ref:** [AGENTS.md](../AGENTS.md)（纪律源头）| [package.json](../package.json)（编排入口）| [.github/workflows/ci.yml](../.github/workflows/ci.yml) | [docs/git提交规范.md](git提交规范.md)
@@ -32,9 +36,10 @@ update: 2026-08-30
 bun run test
 ├─ bun test scripts/tests/                # repo 级脚本测试（test:repo）
 └─ bun run --workspaces … --if-present test   # 逐包执行 scripts.test（test:packages）
-   ├─ @yceachan/pi-better-btw       bun test test/
+   ├─ @yceachan/pi-better-btw       bun test test/*.test.ts
    ├─ @yceachan/pi-codex-imagegen   bun test test/
    ├─ @yceachan/pi-gadget           bun test test/
+   ├─ @yceachan/pi-quiet            bun test test/
    ├─ @yceachan/pi-shelld            bun test test/
    ├─ @yceachan/pi-switch-cwd       bun ./cwd-utils.test.ts
    ├─ @yceachan/pi-vision-helper    bun ./lib/vision-helper.test.ts
@@ -60,7 +65,7 @@ bun 以**该 package 目录**为 cwd 执行其 workspace 脚本，包内脚本�
 | 依赖真实 Pi、tmux、模型、凭据、GUI 或外部服务的测试只能注册为 `scripts.test:e2e` | 这类环境 CI 与他人机器不可复现，混入默认入口会让 `bun run test` 不可信 |
 | package 没有默认测试时省略 `scripts.test`，不添加占位脚本 | `"test": "echo ok"` 之类的占位掩盖"此处无测试"的事实 |
 | 根 manifest 与 CI workflow 不得为单个 package 添加测试路径或专属命令 | 专属命令绕过包自治，测试会随包迁移而失联 |
-| 本地和 CI 的默认全量测试入口统一为 `bun run test` | 一个入口，本地红了 CI 必红，无第二真相 |
+| 本地和 CI 的默认全量测试入口统一为 `bun run test` | 在一致的运行时和依赖输入下复用同一套编排 |
 
 测试归属判定：
 
@@ -94,10 +99,23 @@ bun 以**该 package 目录**为 cwd 执行其 workspace 脚本，包内脚本�
 
 [ci.yml](../.github/workflows/ci.yml) 双 job，均为 `persist-credentials: false` + SHA 锁定的 setup-bun（1.4.2）；`test` job 另以 SHA 锁定的 setup-uv（uv 0.12.3）提供运行时测试依赖：
 
+本地安装、锁文件更新和 CI 运行统一使用上述 Bun 版本。`--frozen-lockfile` 同时约束 manifest 与依赖解析结果；在干净检出中验证，可发现已有 `node_modules` 掩盖的差异。升级 Bun 时，同时审查 CI 版本、锁文件变化和完整验证结果。
+
 | job | 步骤 |
 | --- | --- |
 | `typecheck` | `bun install --frozen-lockfile` → `bun run typecheck` |
 | `test` | setup-uv（SHA）→ `bun install --frozen-lockfile` → `bun run test` |
+
+两个 job 均在安装通过后进入验证阶段。遇到 `lockfile had changes, but lockfile is frozen` 时，先比较本地与 CI 的 Bun 版本，并用 CI 版本在干净检出复现；审查解析差异后，选择统一运行时或重新生成锁文件，再运行完整检查：
+
+```bash
+bun --version
+bun install --frozen-lockfile
+bun run typecheck
+bun run test
+```
+
+发布工作流、npm 包可用性与 Release 页的交付检查统一见[发版指南](发行版本控制策略.md#验证发布是否完成)。
 
 `scripts.test:e2e` 不进 CI，手动执行：`bun run test:e2e`（需 tmux 与 `~/.pi/agent/settings.json` 中的默认模型）。
 
