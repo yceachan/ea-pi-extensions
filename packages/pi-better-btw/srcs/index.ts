@@ -1,4 +1,4 @@
-import type { AgentMessage, AgentTool } from "@earendil-works/pi-agent-core";
+import type { AgentTool } from "@earendil-works/pi-agent-core";
 import type {
   ExtensionAPI,
   ExtensionContext,
@@ -50,6 +50,8 @@ export default function sideChatExtension(pi: ExtensionAPI) {
   const tracker = new FileActivityTracker();
   let activeOverlay: SideChatOverlay | null = null;
   let overlayHandle: OverlayHandle | null = null;
+  let opening: Promise<void> | null = null;
+  let lifecycle = 0;
   const indicator = new SideChatStatusIndicator();
   let sideSettings: Pick<ForkContext, "model" | "thinkingLevel"> | null = null;
   let mouseTerminal: Terminal | null = null;
@@ -129,7 +131,7 @@ export default function sideChatExtension(pi: ExtensionAPI) {
   const backgroundSideChat = async (ctx: ExtensionContext) => {
     if (!activeOverlay) return openSideChat(ctx);
     const handle = overlayHandle;
-    if (!handle) return;
+    if (!handle) { await opening; return; }
     if (handle.isHidden()) {
       handle.setHidden(false);
       handle.focus();
@@ -151,7 +153,7 @@ export default function sideChatExtension(pi: ExtensionAPI) {
   const toggleSideChat = async (ctx: ExtensionContext) => {
     if (activeOverlay) {
       const handle = overlayHandle;
-      if (!handle) return;
+      if (!handle) { await opening; return; }
       if (handle.isHidden()) {
         // Hidden in the background: restore and focus.
         handle.setHidden(false);
@@ -171,7 +173,8 @@ export default function sideChatExtension(pi: ExtensionAPI) {
     return openSideChat(ctx);
   };
 
-  const openSideChat = async (ctx: ExtensionContext, clear = false) => {
+  const openSideChat = async (ctx: ExtensionContext, clear = false): Promise<void> => {
+    if (opening) return opening;
     if (!ctx.model) {
       ctx.ui.notify("Cannot open side chat: no model configured", "error");
       return;
@@ -212,74 +215,97 @@ export default function sideChatExtension(pi: ExtensionAPI) {
     // frame. Its handle has no update API; mutating this one object lets us
     // reposition the existing component without losing its agent or draft.
     const overlayOptions = sideChatOverlayOptions("floating");
-    try {
-      const action = await ctx.ui.custom<"close" | "refork" | "clear">(
-        (tui, theme, keybindings, done) => {
-          if (tui.hasOverlay()) {
-            setTimeout(() => {
-              ctx.ui.notify(
-                "Close or background the current overlay first",
-                "warning",
-              );
-            }, 0);
-            throw new Error(OVERLAY_BLOCKED_ERROR);
-          }
+    const generation = lifecycle;
+    let mounted = false;
+    let instance: SideChatOverlay | null = null;
+    let finishOpening!: () => void;
+    let failOpening!: (error: unknown) => void;
+    const ready = new Promise<void>((resolve, reject) => {
+      finishOpening = resolve;
+      failOpening = reject;
+    });
+    opening = ready;
 
-          activeOverlay = new SideChatOverlay({
-            tui,
-            theme,
-            forkContext,
-            tracker,
-            modelRegistry: ctx.modelRegistry,
-            getScopedModels: () => ctx.scopedModels ?? [],
-            keybindings,
-            getBounds: () => overlayHandle?.getBounds(),
-            onLayoutChange: (layout) => { Object.assign(overlayOptions, sideChatOverlayOptions(layout)); },
-            sessionManager: ctx.sessionManager,
-            promptPack,
-            readOnlyExtensionAllowlist: config.readOnlyExtensionAllowlist,
-            onOverlapWarning: (path) => showOverlapWarning(ctx.ui, path),
-            onBusyChange: (busy) => indicator.update(ctx.ui, busy ? "busy" : "idle"),
-            onSettingsChange: (model, thinkingLevel) => { sideSettings = { model, thinkingLevel }; },
-            onBackground: () => {
-              overlayHandle?.unfocus();
-              overlayHandle?.setHidden(true);
-              syncMouseReporting();
-            },
-            onExport: (path) =>
-              ctx.ui.notify(`btw chat exported → ${path}`, "info"),
-            onClose: (action) => {
-              indicator.update(ctx.ui, null);
-              activeOverlay = null;
-              overlayHandle = null;
-              uninstallMouseHandler();
-              done(action);
-            },
-          });
-          installMouseHandler(tui);
-          indicator.update(ctx.ui, "idle");
-          return activeOverlay;
-        },
-        {
-          overlay: true,
-          overlayOptions,
-          onHandle: (handle) => {
-            overlayHandle = handle;
-            handle.focus();
+    // The UI outlives its slash command: only mounting may block the host input loop.
+    const runInteraction = async () => {
+      try {
+        const action = await ctx.ui.custom<"close" | "clear">(
+          (tui, theme, keybindings, done) => {
+            if (tui.hasOverlay()) {
+              setTimeout(() => {
+                ctx.ui.notify(
+                  "Close or background the current overlay first",
+                  "warning",
+                );
+              }, 0);
+              throw new Error(OVERLAY_BLOCKED_ERROR);
+            }
+
+            activeOverlay = instance = new SideChatOverlay({
+              tui,
+              theme,
+              forkContext,
+              tracker,
+              modelRegistry: ctx.modelRegistry,
+              getScopedModels: () => ctx.scopedModels ?? [],
+              keybindings,
+              getBounds: () => overlayHandle?.getBounds(),
+              onLayoutChange: (layout) => { Object.assign(overlayOptions, sideChatOverlayOptions(layout)); },
+              sessionManager: ctx.sessionManager,
+              promptPack,
+              readOnlyExtensionAllowlist: config.readOnlyExtensionAllowlist,
+              onOverlapWarning: (path) => showOverlapWarning(ctx.ui, path),
+              onBusyChange: (busy) => indicator.update(ctx.ui, busy ? "busy" : "idle"),
+              onSettingsChange: (model, thinkingLevel) => { sideSettings = { model, thinkingLevel }; },
+              onBackground: () => {
+                overlayHandle?.unfocus();
+                overlayHandle?.setHidden(true);
+                syncMouseReporting();
+              },
+              onExport: (path) =>
+                ctx.ui.notify(`btw chat exported → ${path}`, "info"),
+              onClose: (action) => {
+                indicator.update(ctx.ui, null);
+                activeOverlay = null;
+                overlayHandle = null;
+                uninstallMouseHandler();
+                finishOpening();
+                done(action);
+              },
+            });
+            installMouseHandler(tui);
+            indicator.update(ctx.ui, "idle");
+            return activeOverlay;
           },
-        },
-      );
-      if (action === "refork") return openSideChat(ctx);
-      if (action === "clear") return openSideChat(ctx, true);
-    } catch (error) {
-      if (error instanceof Error && error.message === OVERLAY_BLOCKED_ERROR) {
-        return;
+          {
+            overlay: true,
+            overlayOptions,
+            onHandle: (handle) => {
+              overlayHandle = handle;
+              handle.focus();
+              mounted = true;
+              finishOpening();
+            },
+          },
+        );
+        if (action === "clear" && generation === lifecycle) await openSideChat(ctx, true);
+      } catch (error) {
+        if (error instanceof Error && error.message === OVERLAY_BLOCKED_ERROR) {
+          finishOpening();
+          return;
+        }
+        if (!mounted) failOpening(error);
+        instance?.dispose();
+        if (mounted) {
+          ctx.ui.notify(`Side chat failed: ${error instanceof Error ? error.message : String(error)}`, "error");
+        }
       }
-      activeOverlay = null;
-      overlayHandle = null;
-      indicator.update(ctx.ui, null);
-      uninstallMouseHandler();
-      throw error;
+    };
+    void runInteraction();
+    try {
+      await ready;
+    } finally {
+      if (opening === ready) opening = null;
     }
   };
 
@@ -288,20 +314,10 @@ export default function sideChatExtension(pi: ExtensionAPI) {
     handler: backgroundSideChat,
   });
 
-  const requestClose = async () => {
-    if (!activeOverlay) return;
-    overlayHandle?.setHidden(false);
-    overlayHandle?.focus();
-    syncMouseReporting();
-    activeOverlay.requestClose();
-  };
-  pi.registerCommand("btw-close", {
-    description: "Close side chat (with confirmation)",
-    handler: requestClose,
-  });
-  // Session changes are lifecycle teardown, not a user close request.
-  pi.on("session_start", () => { activeOverlay?.dispose(); sideSettings = null; });
+  // Session changes destroy the side chat; hidden chats otherwise stay alive.
+  pi.on("session_start", () => { lifecycle++; activeOverlay?.dispose(); sideSettings = null; });
   pi.on("session_shutdown", () => {
+    lifecycle++;
     activeOverlay?.dispose();
     uninstallMouseHandler();
     indicator.dispose();

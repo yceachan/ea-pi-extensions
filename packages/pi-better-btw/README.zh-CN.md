@@ -8,7 +8,7 @@
 
 > [!note]
 >
-> 本package是对 [nicobailon/pi-side-chat](https://github.com/nicobailon/pi-side-chat) 的维护型 fork —— 原作者 **Nico Bailon**，由 **yceachan** 扩展并在[ea-pi-extensions](https://github.com/yceachan/ea-pi-extensions) 中维护。
+> 本package是对 [nicobailon/pi-side-chat](https://github.com/nicobailon/pi-side-chat) 的维护型 fork —— 原作者 **Nico Bailon**，由 **yceachan** 扩展并在[ea-pi-extensions](https://github.com/yceachan/ea-pi-extensions) 中维护。感谢 **[De0ta](https://github.com/De0ta)** 在 [PR #5](https://github.com/yceachan/ea-pi-extensions/pull/5) 中贡献独立模型控制、布局与主题化 UI。
 
 ## TL;DR
 
@@ -25,7 +25,7 @@ pi install npm:@yceachan/pi-better-btw
 > /btw  || or Alt+W
 ```
 
-你在处理一个较长任务时，想顺便问点小事又不想打断主线——查一个 API 细节、验证一个思路、搜点东西，或者看看主线 agent 在干什么。打开BTW Tui OverLay，提问，关闭。主线线程完全不受打扰。
+你在处理一个较长任务时，想顺便问点小事又不想打断主线——查一个 API 细节、验证一个思路、搜点东西，或者看看主线 agent 在干什么。打开 BTW TUI Overlay，提问，再隐藏浮层。主线线程完全不受打扰。
 
 <img src="preview.jpg" alt="pi-better-btw 旁路聊天预览" width="1100" />
 
@@ -58,7 +58,7 @@ pi install npm:@yceachan/pi-better-btw
 
 用 `/btw`（别名 `/side`）或 `Alt+W`（同时负责后台/显示切换）打开旁路会话。提问后按 `Enter`。
 
-`Esc` 请求确认关闭，默认选中保留。确认后停止生成并丢弃旁路会话；在选择器、确认卡片或帮助页中按 `Esc` 则返回聊天。`Alt+W` 隐藏或恢复浮层，不停止生成，保留历史、草稿和滚动位置。主编辑器中的 `/btw-close` 同样请求确认关闭。
+生成中第一次按 `Esc` 打断当前 turn，并留在聊天；turn 结束后再按 `Esc` 隐藏浮层，保留 session、历史、草稿和滚动位置。在模型、思考级别选择器或帮助页中，`Esc` 先返回聊天。`Alt+W` 隐藏或恢复浮层，运行中的生成继续进行。仅 `Alt+N` 销毁当前旁路 session 并开启空白会话；不再提供 `/btw-close` 和 `Alt+R`。
 
 主界面默认页脚在模型旁显示 `[● side chat]`：生成中为黄色，空闲时为绿色，隐藏期间仍可见，关闭后消失。不接管自定义页脚，而是提供标准 keyed status 供其显示。
 
@@ -70,8 +70,7 @@ pi install npm:@yceachan/pi-better-btw
 | ------ | ---- |
 | `Alt+W` | 打开（关闭时）/ 后台化（显示时）/ 恢复（隐藏时） |
 | `Ctrl+T` | 切换只读 / 编辑模式 |
-| `Alt+R` | 从最新主线上下文重新 fork |
-| `Alt+N` | 开始空白对话 |
+| `Alt+N` | 销毁当前 session 并开启空白会话 |
 | `Alt+E` | 导出对话记录到 `$CWD/.agents/eval/pi-better-btw-<timestamp>.md` |
 
 在Readonly Mode(default),只读车道是**强制的**：越权调用工具会被硬阻断并注入prompt；第二次违规会升级措辞并中止该轮，提示（`🚧 lane blocked` 状态行）。已执行但失败的只读调用会被 `afterToolCall` 备注再次归位。编辑模式（`Ctrl+T`）不受影响。
@@ -101,7 +100,7 @@ What changed since I opened this side chat?
 | ---- | ---- |
 | `Alt+W` | 打开（关闭时）/ 后台化（显示时）/ 恢复（隐藏时） |
 | `Enter` | 发送消息 |
-| `Esc` | 请求确认关闭；从选择器、确认卡片或帮助页返回聊天 |
+| `Esc` | 生成中打断当前 turn，空闲时隐藏；从选择器或帮助页返回聊天 |
 | `?` | 完整快捷键页（仅空草稿） |
 | `Ctrl+Alt+←` / `↑` / `↓` / `→` | 全屏 / 小浮窗 / 大浮窗 / 右半屏 |
 | `Ctrl+↑` / `Ctrl+↓` | 上一条 / 下一条消息（Pi 绑定） |
@@ -110,8 +109,7 @@ What changed since I opened this side chat?
 | `Shift+Tab` | 循环支持的思考级别（Pi 绑定） |
 | `Alt+M` / `Alt+T` | 搜索模型 / 选择思考级别 |
 | `Alt+S` | 停止当前生成，保留会话 |
-| `Alt+R` | 从最新主线上下文重新 fork |
-| `Alt+N` | 开始空白对话 |
+| `Alt+N` | 销毁当前 session 并开启空白会话 |
 | `Alt+E` | 导出 btw 对话历史到 `$CWD/.agents/eval/pi-better-btw-<timestamp>.md` |
 | `Ctrl+T` | 切换只读 / 编辑模式 |
 | `PgUp` / `PgDn` | 整页滚动历史 |
@@ -130,10 +128,6 @@ What changed since I opened this side chat?
 ### `/side`
 
 打开旁路会话浮层（保留上游命令名作为兼容别名）。
-
-### `/btw-close`
-
-请求确认关闭，先恢复隐藏的会话。无活动旁路会话时不操作。
 
 ### `peek_main`
 
@@ -186,7 +180,7 @@ pi-better-btw 从三个位置按优先级递增读取 `config.json` —— 每�
 
 ## 工作原理
 
-扩展克隆当前会话上下文，创建带全部扩展工具的独立 agent 实例，并在 TUI 浮层中渲染。隐藏（`Alt+W`）保留 agent、草稿及流式输出；确认关闭会销毁旁路会话，下次打开重新 fork 主线上下文。
+扩展克隆当前会话上下文，创建带全部扩展工具的独立 agent 实例，并在 TUI 浮层中渲染。打开命令在浮层挂载后即返回，主输入循环继续处理后续命令；UI 交互独立运行，直到宿主会话清理或 `Alt+N` 重建。隐藏保留 agent 和草稿，`Alt+W` 同时保留正在进行的生成。`Alt+N` 中止并销毁旧 session，以记忆的旁路模型和思考设置开启空白会话。
 
 默认页脚指示器适配公开的 `FooterComponent` 渲染器，不修改已安装的 Pi 文件，也不接管 `setFooter`；扩展退出时恢复渲染器。标准 keyed `setStatus` 在运行中切换自定义页脚时仍然可用。模型行位置依赖 Pi 页脚内部布局，使用真实渲染器回归测试覆盖。
 
@@ -214,7 +208,7 @@ Pi 全屏模式下，`SideChatOverlay.handleMouse()` 接收 Pi 分发的组件�
 │   ├── side-chat-overlay.ts  # TUI 浮层、agent 生命周期、车道强制、鼠标路由
 │   ├── side-chat-messages.ts # 消息渲染、换行、选择、滚动
 │   ├── side-chat-status.ts   # 主界面页脚指示器与 keyed status 兜底
-│   ├── side-chat-dialog.ts   # 模型、思考级别、关闭确认卡片
+│   ├── side-chat-dialog.ts   # 模型与思考级别选择卡片
 │   ├── side-chat-help.ts     # 自适应提示与快捷键页
 │   ├── side-chat-input.ts    # 输入卡片、光标与鼠标坐标映射
 │   ├── side-chat-panel.ts    # 主主题及终端衍生配色

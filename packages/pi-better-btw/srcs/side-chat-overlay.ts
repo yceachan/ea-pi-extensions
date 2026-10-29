@@ -94,10 +94,7 @@ interface SideChatOverlayOptions {
   getBounds?: () => OverlayBounds | undefined;
   onBusyChange?: (busy: boolean) => void;
   onSettingsChange?: (model: Model<any>, thinkingLevel: ThinkingLevel) => void;
-  onClose: (
-    action: "close" | "refork" | "clear",
-    messages: AgentMessage[],
-  ) => void;
+  onClose: (action: "close" | "clear") => void;
   /** Alt+E export written to $CWD/.agents/eval/ — called with the written path. */
   onExport: (path: string) => void;
   /** Clipboard boundary; defaults to Pi's native/OSC 52 cascade. */
@@ -957,19 +954,6 @@ export class SideChatOverlay implements Component, Focusable {
     this.options.tui.requestRender();
   }
 
-  /** A real close destroys the side chat; cancellation leaves any turn running. */
-  requestClose(): void {
-    if (this.disposed) return;
-    this.openDialog(new SideChatDialog(
-      this.options.theme, "Close side chat?",
-      [{ value: "cancel", label: "Keep side chat" }, { value: "close", label: "Close and discard conversation" }],
-      false, 0,
-      (value) => { this.dismissDialog(); if (value === "close") this.dispose(); },
-      () => this.dismissDialog(),
-      this.isStreaming ? "The running response will be stopped. This cannot be undone." : "The side-chat history will be discarded. This cannot be undone.",
-    ));
-  }
-
   private openDialog(dialog: SideChatDialog | SideChatHelp): void {
     this.cancelMouseDrag();
     this.dialog = dialog;
@@ -1081,14 +1065,22 @@ export class SideChatOverlay implements Component, Focusable {
     if (matchesKey(data, Key.ctrlAlt("up"))) { this.changeLayout("compact"); return; }
     if (matchesKey(data, Key.ctrlAlt("right"))) { this.changeLayout("right"); return; }
     if (matchesKey(data, Key.ctrlAlt("down"))) { this.changeLayout("floating"); return; }
-    // Stopping a turn must remain available inside help/close confirmation too.
+    // Stopping a turn must remain available inside help and model pickers too.
     if (matchesKey(data, Key.alt("s"))) { this.agent.abort(); return; }
     if (this.dialog) {
       this.dialog.handleInput(data);
       this.options.tui.requestRender();
       return;
     }
-    if (matchesKey(data, Key.escape)) { this.requestClose(); return; }
+    if (matchesKey(data, Key.escape)) {
+      if (this.isStreaming) this.agent.abort();
+      else this.options.onBackground();
+      return;
+    }
+    if (matchesKey(data, Key.alt("n"))) {
+      this.dispose("clear");
+      return;
+    }
     // Only an empty draft treats ? as navigation; normal questions and pasted text stay editable.
     if (data === "?" && !this.editor.getText()) {
       this.openDialog(new SideChatHelp(() => this.dismissDialog(), this.options.keybindings));
@@ -1099,14 +1091,6 @@ export class SideChatOverlay implements Component, Focusable {
     if (this.matchesAction(data, "app.thinking.cycle", Key.shift("tab"))) { this.cycleThinking(); return; }
     if (matchesKey(data, Key.alt("m"))) { this.chooseModel(); return; }
     if (matchesKey(data, Key.alt("t"))) { this.chooseThinking(); return; }
-    if (matchesKey(data, Key.alt("r"))) {
-      this.dispose("refork");
-      return;
-    }
-    if (matchesKey(data, Key.alt("n"))) {
-      this.dispose("clear");
-      return;
-    }
     if (matchesKey(data, Key.alt("e"))) {
       this.exportChatHistory();
       return;
@@ -1189,7 +1173,7 @@ export class SideChatOverlay implements Component, Focusable {
     this.options.tui.requestRender();
   }
 
-  dispose(action: "close" | "refork" | "clear" = "close") {
+  dispose(action: "close" | "clear" = "close") {
     if (this.disposed) return;
     this.disposed = true;
     this.unsubscribeColorScheme?.();
@@ -1200,9 +1184,8 @@ export class SideChatOverlay implements Component, Focusable {
       clearTimeout(this.copyClearTimer);
       this.copyClearTimer = null;
     }
-    const messages = [...this.agent.state.messages];
     this.agent.abort();
-    this.options.onClose(action, messages);
+    this.options.onClose(action);
   }
 
   invalidate() {
@@ -1266,7 +1249,7 @@ export function renderSideChatFrame(opts: SideChatFrameOptions): string[] {
 export function buildSideChatHintLines(width: number, bindings?: ShortcutBindings, theme?: Theme): string[] {
   const modelKey = actionShortcutLabel(bindings, "app.model.cycleForward", "Ctrl+P");
   const thinkingKey = actionShortcutLabel(bindings, "app.thinking.cycle", "Shift+Tab");
-  const primary = [shortcutHint("Enter", "send", theme), shortcutHint("Esc", "close", theme), shortcutHint("?", "keys", theme)].join(" · ");
+  const primary = [shortcutHint("Enter", "send", theme), shortcutHint("Esc", "stop/hide", theme), shortcutHint("?", "keys", theme)].join(" · ");
   const secondary = [shortcutHint("Alt+W", "hide", theme), shortcutHint(modelKey, "model", theme), shortcutHint(thinkingKey, "think", theme)];
   const candidates = [
     [primary, ...secondary].join(" · "),

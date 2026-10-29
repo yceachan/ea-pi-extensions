@@ -15,7 +15,8 @@
   ],
   "author": "yceachan <yceachan@foxmail.com>",
   "contributors": [
-    "Nico Bailon"
+    "Nico Bailon",
+    "LLLLLink17528 (https://github.com/De0ta)"
   ],
   "license": "MIT",
   "repository": {
@@ -43,7 +44,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "bun test ./test/"
+    "test": "bun test test/*.test.ts"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*",

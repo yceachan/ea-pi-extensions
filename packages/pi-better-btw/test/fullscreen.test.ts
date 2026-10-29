@@ -53,6 +53,7 @@ function setup(mode: "fullscreen" | "regular" = "fullscreen", configureTui?: (tu
     getThinkingLevel: () => "off",
   } as any);
   let overlay!: SideChatOverlay;
+  let closed!: Promise<unknown>;
   let handle: ReturnType<TuiAltScreen["showOverlay"]>;
   const copies: string[] = [];
   const statuses = new Map<string, string | undefined>();
@@ -68,7 +69,7 @@ function setup(mode: "fullscreen" | "regular" = "fullscreen", configureTui?: (tu
       setStatus(key: string, value: string | undefined) { statuses.set(key, value); tui.requestRender(); },
       notify() {},
       custom(factory: any, options: any) {
-        return new Promise((resolve) => {
+        return closed = new Promise((resolve) => {
           overlay = factory(tui, theme, {}, (action: string) => { handle.hide(); resolve(action); });
           (overlay as any).options.copyText = async (text: string) => { copies.push(text); };
           (overlay as any).messages.setMessages([{ role: "user", content: "hello world", timestamp: 1 }]);
@@ -78,15 +79,16 @@ function setup(mode: "fullscreen" | "regular" = "fullscreen", configureTui?: (tu
       },
     },
   };
-  // /btw stays pending until its custom interaction closes.
-  const closed = commands.get("btw").handler("", ctx);
+  // The command completes at mount; the custom interaction remains active.
+  const opened = commands.get("btw").handler("", ctx);
   tui.renderNow();
   const fixture = {
-    terminal, tui, overlay, copies, closed, ctx, statuses, models, events, commands,
+    terminal, tui, copies, opened, ctx, statuses, models, events, commands,
+    get overlay() { return overlay; },
+    get closed() { return closed; },
     get handle() { return handle; },
     background: () => shortcuts.get("alt+w")(ctx),
     shortcuts,
-    requestClose: () => commands.get("btw-close").handler("", ctx),
     get mainInputs() { return mainInputs; },
     get mainSelection() { return tui instanceof TuiAltScreen && tui.hasActiveSelection(); },
     mouse(button: number, x: number, y: number, release = false) {
@@ -95,6 +97,7 @@ function setup(mode: "fullscreen" | "regular" = "fullscreen", configureTui?: (tu
   };
   cleanups.push(async () => {
     overlay.dispose();
+    await opened;
     await closed;
     events.get("session_shutdown")?.();
     tui.stop();
@@ -183,59 +186,64 @@ describe("panel colors and native navigation", () => {
 });
 
 describe("side-chat lifecycle and settings", () => {
-  test("Esc requests close; cancel and Alt+W preserve the running turn and draft", async () => {
-    const f = setup();
-    const agent = (f.overlay as any).agent;
-    let aborts = 0;
-    agent.abort = () => { aborts++; };
-    (f.overlay as any).isStreaming = true;
-    (f.overlay as any).editor.setText("draft");
-    f.terminal.input("\x1b");
-    expect(f.handle.isHidden()).toBe(false);
-    expect((f.overlay as any).dialog).not.toBeNull();
-    expect(aborts).toBe(0);
-    f.terminal.input("\x1b"); // cancel confirmation
-    await f.background();
-    expect(f.handle.isHidden()).toBe(true);
-    await f.background();
-    expect(f.handle.isHidden()).toBe(false);
-    expect((f.overlay as any).editor.getText()).toBe("draft");
-    (f.overlay as any).isStreaming = false;
-  });
+  for (const mode of ["fullscreen", "regular"] as const) {
+    test(`${mode}: Esc stops a running turn, then hides the same session when idle`, async () => {
+      const f = setup(mode);
+      await f.opened;
+      const overlay = f.overlay;
+      const agent = (overlay as any).agent;
+      let finish!: () => void;
+      let aborts = 0;
+      agent.prompt = () => new Promise<void>((resolve) => { finish = resolve; });
+      agent.abort = () => { aborts++; finish(); };
+      const turn = (overlay as any).handleSubmit("question");
+      (overlay as any).editor.setText("draft");
+      await f.background();
+      expect(aborts).toBe(0);
+      await f.background();
+      f.terminal.input("\x1b");
+      expect(aborts).toBe(1);
+      expect(f.handle.isHidden()).toBe(false);
+      expect((overlay as any).dialog).toBeNull();
+      await turn;
+      f.terminal.input("\x1b");
+      expect(f.handle.isHidden()).toBe(true);
+      expect((overlay as any).disposed).toBe(false);
+      expect(f.statuses.get("pibtw.side-chat")).toBeDefined();
+      await f.commands.get("btw").handler("", f.ctx);
+      expect(f.overlay).toBe(overlay);
+      expect(f.handle.isHidden()).toBe(false);
+      expect((overlay as any).editor.getText()).toBe("draft");
+    });
+  }
 
-  test("close from hidden chat restores a confirmation; default/cancel never closes", async () => {
+  test("only Alt+N replaces the session; legacy destructive entries are absent", async () => {
     const f = setup();
-    await f.background();
-    await f.requestClose();
-    expect(f.handle.isHidden()).toBe(false);
-    expect(f.overlay.render(100).map(stripTerminalSequences).join("\n")).toContain("Close side chat?");
-    f.terminal.input("\r"); // defaults to Keep
-    expect((f.overlay as any).disposed).toBe(false);
+    await f.opened;
+    const overlay = f.overlay;
+    expect(f.commands.has("btw-close")).toBe(false);
     expect(f.shortcuts.has("ctrl+alt+w")).toBe(false);
-    f.terminal.input("\x1b"); // Esc now owns close
-    expect((f.overlay as any).dialog).not.toBeNull();
-    f.terminal.input("\x1b"); // cancel confirmation, stay in the side chat
+    f.terminal.input("\x1br");
+    expect((overlay as any).disposed).toBe(false);
+    f.terminal.input("\x1bn");
+    await Bun.sleep(0);
+    expect((overlay as any).disposed).toBe(true);
+    expect(f.overlay).not.toBe(overlay);
     expect(f.handle.isHidden()).toBe(false);
-    expect((f.overlay as any).disposed).toBe(false);
-    await f.commands.get("btw-close").handler("", f.ctx);
-    f.terminal.input("\x1b[B");
-    f.terminal.input("\r");
-    await f.closed;
-    expect((f.overlay as any).disposed).toBe(true);
-    expect(f.statuses.get("pibtw.side-chat")).toBeUndefined();
+    expect((f.overlay as any).editor.getText()).toBe("");
   });
 
   for (const mode of ["fullscreen", "regular"] as const) {
-    test(`${mode}: Alt+S stops a running turn inside help and close confirmation`, async () => {
-      for (const modalKey of ["?", "\x1b"]) {
+    test(`${mode}: Alt+S stops a running turn inside help and model pickers`, async () => {
+      for (const modalKey of ["?", "\x1bm"]) {
         const f = setup(mode);
         const agent = (f.overlay as any).agent;
         let finish!: () => void;
         let aborts = 0;
         agent.prompt = () => new Promise<void>((resolve) => { finish = resolve; });
         agent.abort = () => { aborts++; finish(); };
-        const turn = (f.overlay as any).handleSubmit("question");
         f.terminal.input(modalKey);
+        const turn = (f.overlay as any).handleSubmit("question");
         const dialog = (f.overlay as any).dialog;
         expect(dialog).not.toBeNull();
         f.terminal.input("\x1bs");
@@ -441,25 +449,26 @@ describe("side-chat lifecycle and settings", () => {
     expect(f.statuses.get("pibtw.side-chat")).toContain("\x1b[32m●");
   });
 
-  test("confirmed close aborts a running turn and late completion never revives status", async () => {
+  test("Alt+N aborts the old turn and late completion never changes the new session status", async () => {
     const f = setup();
-    const agent = (f.overlay as any).agent;
+    await f.opened;
+    const overlay = f.overlay;
+    const agent = (overlay as any).agent;
     let finish!: () => void;
     let aborts = 0;
     agent.prompt = () => new Promise<void>((resolve) => { finish = resolve; });
     agent.abort = () => { aborts++; };
-    const turn = (f.overlay as any).handleSubmit("hello");
+    const turn = (overlay as any).handleSubmit("hello");
     expect(f.statuses.get("pibtw.side-chat")).toContain("\x1b[33m●");
-    f.terminal.input("\x1b");
-    expect(aborts).toBe(0);
-    f.terminal.input("\x1b[B");
-    f.terminal.input("\r");
-    await f.closed;
+    f.terminal.input("\x1bn");
+    await Bun.sleep(0);
     expect(aborts).toBe(1);
-    expect(f.statuses.get("pibtw.side-chat")).toBeUndefined();
+    expect(f.overlay).not.toBe(overlay);
+    const status = f.statuses.get("pibtw.side-chat");
+    expect(status).toContain("\x1b[32m●");
     finish();
     await turn;
-    expect(f.statuses.get("pibtw.side-chat")).toBeUndefined();
+    expect(f.statuses.get("pibtw.side-chat")).toBe(status);
   });
 
   test("borderless surfaces fill every cell in dark/light and narrow layouts", () => {

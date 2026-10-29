@@ -12,7 +12,7 @@ describe("side-chat shortcut page", () => {
   test("common hints use theme text/muted colors and no obscure actions", () => {
     const lines = buildSideChatHintLines(100, undefined, currentTheme);
     expect(lines).toHaveLength(1);
-    expect(lines[0]).toContain(currentTheme.fg("text", "Esc") + " " + currentTheme.fg("muted", "close"));
+    expect(lines[0]).toContain(currentTheme.fg("text", "Esc") + " " + currentTheme.fg("muted", "stop/hide"));
     expect(lines[0]).toContain(currentTheme.fg("text", "?"));
     const text = lines.map(stripTerminalSequences).join("\n");
     expect(text).toContain("Ctrl+P model");

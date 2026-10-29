@@ -8,7 +8,7 @@
 
 > [!note]
 >
-> This package is a maintained fork of [nicobailon/pi-side-chat](https://github.com/nicobailon/pi-side-chat) — original author **Nico Bailon**; extended by **yceachan** and maintained in [ea-pi-extensions](https://github.com/yceachan/ea-pi-extensions).
+> This package is a maintained fork of [nicobailon/pi-side-chat](https://github.com/nicobailon/pi-side-chat) — original author **Nico Bailon**; extended by **yceachan** and maintained in [ea-pi-extensions](https://github.com/yceachan/ea-pi-extensions). Thanks to **[De0ta](https://github.com/De0ta)** for the model controls, layouts and themed UI contributed in [PR #5](https://github.com/yceachan/ea-pi-extensions/pull/5).
 
 ## TL;DR
 
@@ -25,7 +25,7 @@ pi install npm:@yceachan/pi-better-btw
 > /btw  || or Alt+W
 ```
 
-You're in the middle of a longer task and want to ask something small without derailing the main thread — check an API detail, sanity-check an approach, search something, or peek at what the main agent is doing. Open the btw TUI overlay, ask, close it. The main thread never gets interrupted.
+You're in the middle of a longer task and want to ask something small without derailing the main thread — check an API detail, sanity-check an approach, search something, or peek at what the main agent is doing. Open the btw TUI overlay, ask, then hide it. The main thread never gets interrupted.
 
 <img src="preview.jpg" alt="pi-better-btw side-chat preview" width="1100" />
 
@@ -58,7 +58,7 @@ You're in the middle of a longer task and want to ask something small without de
 
 Open the side chat with `/btw` (alias `/side`) or `Alt+W` (which also toggles background/display). Ask a question and press `Enter`.
 
-`Esc` requests confirmed close, with Keep selected by default. Confirming stops generation and discards the side chat; `Esc` inside a picker, confirmation or help page returns to the chat. Use `Alt+W` to hide/restore without stopping generation, preserving history, draft and scroll position. `/btw-close` requests confirmed close from the main editor.
+While a response is running, `Esc` stops the current turn and leaves the chat open. Once idle, `Esc` hides the overlay, retaining the session, history, draft and scroll position. Inside a model/thinking picker or help page, `Esc` first returns to the chat. `Alt+W` hides/restores even while generation continues. Only `Alt+N` discards the current side-chat session and starts an empty one; `/btw-close` and `Alt+R` are no longer available.
 
 The default main footer shows `[● side chat]` beside its model: yellow while generating, green when idle, including while hidden. It disappears on close. Custom footers are not replaced; they receive a standard keyed status fallback.
 
@@ -70,8 +70,7 @@ The borderless panel follows the main theme and terminal colors, subtly separate
 | -------- | ------ |
 | `Alt+W` | Open (when closed) / background (when visible) / restore (when hidden) |
 | `Ctrl+T` | Toggle read-only / edit mode |
-| `Alt+R` | Re-fork from the latest main context |
-| `Alt+N` | Start an empty conversation |
+| `Alt+N` | Discard the session and start an empty conversation |
 | `Alt+E` | Export the transcript to `$CWD/.agents/eval/pi-better-btw-<timestamp>.md` |
 
 In Read-only Mode (default), the read-only lane is **enforced**: attempting an out-of-lane tool call is hard-blocked with a prompt injection; a second violation escalates the wording and aborts the turn (a `🚧 lane blocked` status line). Executed-but-failed read-only calls are re-grounded by an `afterToolCall` note. Edit mode (`Ctrl+T`) is unaffected.
@@ -101,7 +100,7 @@ What changed since I opened this side chat?
 | ---- | ---- |
 | `Alt+W` | Open (when closed) / background (when visible) / restore (when hidden) |
 | `Enter` | Send message |
-| `Esc` | Request confirmed close; return to chat from pickers/confirmation/help |
+| `Esc` | Stop the running turn; hide when idle; return from pickers/help |
 | `?` | Full shortcut page (empty draft only) |
 | `Ctrl+Alt+←` / `↑` / `↓` / `→` | Fullscreen / smaller floating / larger floating / right-half layout |
 | `Ctrl+↑` / `Ctrl+↓` | Previous / next message (Pi bindings) |
@@ -110,8 +109,7 @@ What changed since I opened this side chat?
 | `Shift+Tab` | Cycle supported thinking levels (Pi binding) |
 | `Alt+M` / `Alt+T` | Search models / pick thinking level |
 | `Alt+S` | Stop the current turn, keeping the chat |
-| `Alt+R` | Re-fork from latest main context |
-| `Alt+N` | Start empty conversation |
+| `Alt+N` | Discard the session and start an empty conversation |
 | `Alt+E` | Export the btw chat history to `$CWD/.agents/eval/pi-better-btw-<timestamp>.md` |
 | `Ctrl+T` | Toggle read-only / edit mode |
 | `PgUp` / `PgDn` | Scroll history by a page |
@@ -130,10 +128,6 @@ Opens the side chat overlay. Alias for `/side`.
 ### `/side`
 
 Opens the side chat overlay (upstream name kept as a compatibility alias).
-
-### `/btw-close`
-
-Requests confirmed close, restoring a hidden chat first. Does nothing without an active side chat.
 
 ### `peek_main`
 
@@ -186,7 +180,7 @@ The bundled `config.json` ships the official pi tool set in the read-only allowl
 
 ## How It Works
 
-The extension clones the current session context, creates a separate agent instance with all extension-registered tools, and renders it in a TUI overlay. Hiding (`Alt+W`) preserves the agent and draft while streaming continues. Confirmed close destroys the chat; the next opening forks fresh main context.
+The extension clones the current session context, creates a separate agent instance with all extension-registered tools, and renders it in a TUI overlay. Opening commands return as soon as the overlay is mounted, so the main input loop can continue dispatching commands while the chat is visible or hidden. The UI interaction runs independently until session teardown or `Alt+N`. Hiding preserves the agent and draft; `Alt+W` also keeps a running response active. `Alt+N` aborts the old session and opens an empty one with the remembered side-chat model and thinking settings.
 
 The default-footer badge adapts the exported `FooterComponent` renderer without editing installed Pi files or taking over `setFooter`. It restores the renderer on shutdown. A keyed `setStatus` remains available when custom footers are switched at runtime. Model-row placement depends on Pi footer internals, covered by a real-renderer regression test.
 
@@ -214,7 +208,7 @@ Structure:
 │   ├── side-chat-overlay.ts  # TUI overlay, agent lifecycle, lane enforcement, mouse routing
 │   ├── side-chat-messages.ts # message rendering, wrapping, selection, scrolling
 │   ├── side-chat-status.ts   # main-footer indicator and keyed fallback
-│   ├── side-chat-dialog.ts   # model/thinking/close confirmation cards
+│   ├── side-chat-dialog.ts   # model/thinking selection cards
 │   ├── side-chat-help.ts     # responsive hints and shortcut page
 │   ├── side-chat-input.ts    # input card, cursor and mouse-coordinate mapping
 │   ├── side-chat-panel.ts    # theme/terminal-derived surfaces

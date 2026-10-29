@@ -19,7 +19,7 @@ export function actionShortcutLabel<Action extends string>(bindings: { getKeys?:
 export const SIDE_CHAT_SHORTCUT_GROUPS = [
   { title: "Conversation", items: [
     ["Enter", "Send message"], ["Shift+Enter", "Insert new line"],
-    ["Esc", "Close (with confirmation)"], ["Alt+W", "Hide / restore (keep running)"],
+    ["Esc", "Stop response; hide when idle"], ["Alt+W", "Hide / restore (keep running)"],
     ["Alt+S", "Stop response, keep history"], ["?", "Show shortcuts (empty draft)"],
   ] },
   { title: "Models & thinking", items: [
@@ -28,9 +28,8 @@ export const SIDE_CHAT_SHORTCUT_GROUPS = [
     ["Alt+M", "Search / select model"], ["Alt+T", "Select thinking level"],
   ] },
   { title: "Tools & context", items: [
-    ["Ctrl+T", "Read-only / edit mode"], ["Alt+R", "Re-fork latest main context"],
-    ["Alt+N", "Start empty conversation"], ["Alt+E", "Export conversation"],
-    ["/btw-close", "Close from the main editor"],
+    ["Ctrl+T", "Read-only / edit mode"],
+    ["Alt+N", "Discard session, start empty"], ["Alt+E", "Export conversation"],
   ] },
   { title: "Layout", items: [
     ["Ctrl+Alt+←", "Full screen"], ["Ctrl+Alt+↑", "Original small window"],
