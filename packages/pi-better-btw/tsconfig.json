@@ -12,7 +12,10 @@
     "forceConsistentCasingInFileNames": true,
     "types": ["bun-types", "node"],
     "paths": {
-      "@sinclair/typebox": ["./node_modules/typebox/build/index.d.mts"]
+      "@sinclair/typebox": [
+        "./node_modules/typebox/build/index.d.mts",
+        "../../node_modules/typebox/build/index.d.mts"
+      ]
     }
   },
   "include": ["srcs/**/*.ts", "test/**/*.ts"]
