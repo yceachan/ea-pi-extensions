@@ -477,7 +477,10 @@ export class SideChatMessages implements Component {
     // Pi renders tool executions separately from assistant content; compose them here.
     for (const part of message.content) {
       if (part.type !== "toolCall") continue;
-      const label = this.theme.fg("muted", `[${part.name}]: call`);
+      const args = part.arguments;
+      const target = typeof args.command === "string" ? args.command
+        : ["read", "edit", "write", "ls"].includes(part.name) && typeof args.path === "string" ? args.path : JSON.stringify(args);
+      const label = this.theme.fg("muted", `${part.name} ${target.split(/\r?\n/, 1)[0]}`);
       lines.push(...(this.quiet ? [truncateToWidth(label, width)]
         : wrapTextWithAnsi(`${label}\n${JSON.stringify(part.arguments, null, 2)}`, width)));
     }
@@ -497,9 +500,9 @@ export class SideChatMessages implements Component {
     if (msg.role === "assistant") return this.renderAssistant(msg, width);
 
     if (msg.role === "toolResult") {
-      const label = `[${msg.toolName}]: ${msg.isError ? "failed" : "done"}`;
+      const label = `[${msg.toolName}]${msg.isError ? ": failed" : ""}`;
       const color = msg.isError ? "error" : "muted";
-      if (this.quiet) return [truncateToWidth(theme.fg(color, label), width)];
+      if (this.quiet) return msg.isError ? [truncateToWidth(theme.fg(color, label), width)] : [];
       const fullText = msg.content.map((part) => part.type === "text" ? part.text : "[image]").join("\n");
       return wrapTextWithAnsi(theme.fg(color, `${label}\n${fullText}`), width);
     }

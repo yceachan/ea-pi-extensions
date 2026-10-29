@@ -131,7 +131,7 @@ Opens the side chat overlay (upstream name kept as a compatibility alias).
 
 ### `/btw-quiet`
 
-Toggle side-chat quiet display from either the main editor or the side-chat editor. It is **on by default**: thinking becomes a short `Thinking...` label, tool calls show their names, and tool results show done/failed status. The header displays `[Quiet]`. Toggle off to expand thinking, tool arguments and full text results, including existing history and the current streamed response.
+Toggle side-chat quiet display from either the main editor or the side-chat editor. It is **on by default**: thinking becomes a short `Thinking...` label, and tool calls retain one useful line such as `read src/index.ts` or `bash bun run test`. Successful results add no extra row; failures remain visible. The header displays `[Quiet]`. Toggle off to expand thinking, tool arguments and full text results, including existing history and the current streamed response.
 
 Both entry points share one setting remembered for the current Pi process, including before the first side-chat open and across hide/restore or `Alt+N`. The side-chat command also works during generation and is handled locally. Toggling returns the viewport to the latest content and clears text selection; main-session rendering, model context and exported transcripts remain unchanged.
 

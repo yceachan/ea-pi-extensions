@@ -33,10 +33,10 @@ test("quiet defaults on; toggling rerenders cached history without changing mess
   const folded = text(side);
   expect(folded).toContain("Thinking...");
   expect(folded).toContain("Visible answer");
-  expect(folded).toContain("[read]: call");
-  expect(folded).toContain("[read]: done");
+  expect(folded).toContain("read /secret/path");
+  expect(folded).not.toContain("done");
+  expect(folded).not.toContain("call");
   expect(folded).not.toContain("private thought");
-  expect(folded).not.toContain("/secret/path");
   expect(folded).not.toContain("RESULT_BODY");
   side.setSelection({ line: 0, col: 0 }, { line: 5, col: 80 });
   expect(side.getSelectedText()).not.toContain("private thought");
@@ -58,7 +58,7 @@ test("streaming thinking and tool arguments switch immediately and retain comple
   const message = assistant();
   side.setStreamingMessage(message);
   expect(text(side)).not.toContain("private thought");
-  expect(text(side)).not.toContain("/secret/path");
+  expect(text(side)).toContain("read /secret/path");
   expect(text(side)).toContain("Visible answer");
   side.setQuiet(false);
   const expanded = text(side);
@@ -84,14 +84,28 @@ test("failed tools retain a compact error status and expand their full result on
   expect(text(side)).toContain("provider error");
 });
 
-test("folded tool summaries remain single-line and within narrow terminal widths", () => {
+test("folded tools show a single useful call line, with paths/commands and no success row", () => {
   const side = new SideChatMessages(theme, 200);
-  const call = assistant();
-  call.content = call.content.filter((part) => part.type === "toolCall");
-  side.setMessages([call, result()]);
-  for (const width of [1, 4, 20, 80]) {
-    const lines = side.render(width);
-    expect(lines.filter((line) => stripTerminalSequences(line).trim())).toHaveLength(2);
-    expect(lines.every((line) => visibleWidth(line) <= width)).toBe(true);
+  for (const [name, args, expected] of [
+    ["read", { path: "src/index.ts", offset: 20 }, "read src/index.ts"],
+    ["edit", { path: "src/config.ts", edits: [{ oldText: "before", newText: "after" }] }, "edit src/config.ts"],
+    ["bash", { command: "bun run test\nSECOND_COMMAND", timeout: 30 }, "bash bun run test"],
+    ["search", { query: "useful query" }, 'search {"query":"useful query"}'],
+    ["grep", { pattern: "needle", path: "src" }, 'grep {"pattern":"needle","path":"src"}'],
+  ] as const) {
+    const call = assistant();
+    call.content = [{ type: "toolCall", id: "call", name, arguments: args }];
+    side.setMessages([call, result()]);
+    expect(text(side).trim()).toBe(expected);
+    for (const width of [1, 4, 20, 80]) {
+      const lines = side.render(width);
+      expect(lines.filter((line) => stripTerminalSequences(line).trim())).toHaveLength(1);
+      expect(lines.every((line) => visibleWidth(line) <= width)).toBe(true);
+    }
+    side.setStreamingMessage(call);
+    side.setMessages([]);
+    expect(text(side).trim()).toBe(expected);
+    expect(text(side)).not.toContain("SECOND_COMMAND");
+    side.setStreamingContent("");
   }
 });
