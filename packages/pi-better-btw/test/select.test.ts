@@ -23,6 +23,7 @@ function makeOverlay(): SideChatOverlay {
     forkContext: { messages: [], model: { id: "test-model" }, systemPrompt: "", thinkingLevel: "off", cwd: "/tmp", extensionTools: [] },
     tracker: { writeCount: 0 }, modelRegistry: {}, sessionManager: { getEntries: () => [], getLeafId: () => null },
     promptPack: { framing: "", focusAnchor: "", laneReminders: { preamble: "", base: "", escalated: "", failedNote: "" } },
+    quiet: false, onToggleQuiet() {},
     readOnlyExtensionAllowlist: [], onOverlapWarning: async () => true, onBackground() {}, onExport() {}, onClose() {},
     copyText: async (text: string) => { copiedTexts.push(text); },
   } as any);

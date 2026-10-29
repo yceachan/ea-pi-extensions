@@ -1,6 +1,6 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage } from "@earendil-works/pi-ai";
-import { Markdown, Key, matchesKey, sliceByColumn, stripTerminalSequences, visibleWidth, wrapTextWithAnsi, type Component } from "@earendil-works/pi-tui";
+import { Markdown, Key, matchesKey, sliceByColumn, stripTerminalSequences, truncateToWidth, visibleWidth, wrapTextWithAnsi, type Component } from "@earendil-works/pi-tui";
 import { AssistantMessageComponent, getMarkdownTheme, type Theme } from "@earendil-works/pi-coding-agent";
 import { paintPanel, PanelPalette, type PanelSurface } from "./side-chat-panel.ts";
 
@@ -54,6 +54,7 @@ export class SideChatMessages implements Component {
   private streamingMessage: AssistantMessage | null = null;
   private errorContent = "";
   private toolStatus = "";
+  private quiet = true;
   private scrollOffset = 0;
   private totalLines = 0;
   /** Native Pi-style jump targets: users and assistants without tool calls. */
@@ -115,6 +116,13 @@ export class SideChatMessages implements Component {
     // The cite label/count feeds the prefix; force a rebuild on next render.
     this.cachedInject = -1;
     this.prefixLines = [];
+  }
+
+  setQuiet(quiet: boolean): void {
+    if (this.quiet === quiet) return;
+    this.quiet = quiet;
+    this.resumeFollowing();
+    this.invalidate();
   }
 
   setMessages(messages: AgentMessage[]) {
@@ -461,11 +469,18 @@ export class SideChatMessages implements Component {
     // partial-response errors behave like the main conversation. Keep our own
     // outer layout and selection math; do not emit shell-integration zones
     // from a transient overlay nested inside the main terminal transcript.
-    const component = new AssistantMessageComponent(undefined, false, getMarkdownTheme(), undefined, 0);
+    const component = new AssistantMessageComponent(undefined, this.quiet, getMarkdownTheme(), undefined, 0);
     component.updateContent(message, streaming);
     const lines = component.render(width).map((line) => line.replace(/\x1b\]133;[ABC]\x07/g, ""));
     while (lines.length && !stripTerminalSequences(lines[0]!).trim()) lines.shift();
     while (lines.length && !stripTerminalSequences(lines[lines.length - 1]!).trim()) lines.pop();
+    // Pi renders tool executions separately from assistant content; compose them here.
+    for (const part of message.content) {
+      if (part.type !== "toolCall") continue;
+      const label = this.theme.fg("muted", `[${part.name}]: call`);
+      lines.push(...(this.quiet ? [truncateToWidth(label, width)]
+        : wrapTextWithAnsi(`${label}\n${JSON.stringify(part.arguments, null, 2)}`, width)));
+    }
     return lines;
   }
 
@@ -482,9 +497,11 @@ export class SideChatMessages implements Component {
     if (msg.role === "assistant") return this.renderAssistant(msg, width);
 
     if (msg.role === "toolResult") {
-      const fullText = msg.content[0]?.type === "text" ? msg.content[0].text : "";
-      const preview = fullText.slice(0, 100);
-      return wrapTextWithAnsi(theme.fg("muted", `[${msg.toolName}]: ${preview}${fullText.length > 100 ? "..." : ""}`), width);
+      const label = `[${msg.toolName}]: ${msg.isError ? "failed" : "done"}`;
+      const color = msg.isError ? "error" : "muted";
+      if (this.quiet) return [truncateToWidth(theme.fg(color, label), width)];
+      const fullText = msg.content.map((part) => part.type === "text" ? part.text : "[image]").join("\n");
+      return wrapTextWithAnsi(theme.fg(color, `${label}\n${fullText}`), width);
     }
 
     if (msg.role === "branchSummary" || msg.role === "compactionSummary") {

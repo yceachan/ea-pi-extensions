@@ -64,7 +64,7 @@ The default main footer shows `[● side chat]` beside its model: yellow while g
 
 The side chat has its own model and thinking level, initially inherited from the main session but independently remembered for the current Pi process. `Ctrl+P` / `Ctrl+Shift+P` cycle scoped models, `Shift+Tab` cycles supported thinking levels, and `Alt+P` is an alternative backward-model key. These actions follow Pi's configured bindings. `Alt+M` opens searchable model selection; `Alt+T` opens thinking selection. Stop a running turn with `Alt+S` before switching. Main-session settings are never changed.
 
-The borderless panel follows the main theme and terminal colors, subtly separated from the main background. User messages have padded cards with a thin left rail; the rail is decorative and is not copied. AI replies use Pi's native Markdown/code/thinking renderer without a separate message background. The inset editor grows from three rows to at most five content rows, keeping its cursor visible. Its `›` marker and “问点什么…” placeholder are presentation only. Common hints fit on one row when space permits; type `?` on an empty draft for the full responsive shortcut page.
+The borderless panel follows the main theme and terminal colors, subtly separated from the main background. User messages have padded cards with a thin left rail; the rail is decorative and is not copied. AI replies use Pi's native Markdown/code/thinking renderer without a separate message background; thinking and tool details follow the [quiet display switch](#btw-quiet). The inset editor grows from three rows to at most five content rows, keeping its cursor visible. Its `›` marker and “问点什么…” placeholder are presentation only. Common hints fit on one row when space permits; type `?` on an empty draft for the full responsive shortcut page.
 
 | Shortcut | Action |
 | -------- | ------ |
@@ -128,6 +128,12 @@ Opens the side chat overlay. Alias for `/side`.
 ### `/side`
 
 Opens the side chat overlay (upstream name kept as a compatibility alias).
+
+### `/btw-quiet`
+
+Toggle side-chat quiet display from either the main editor or the side-chat editor. It is **on by default**: thinking becomes a short `Thinking...` label, tool calls show their names, and tool results show done/failed status. The header displays `[Quiet]`. Toggle off to expand thinking, tool arguments and full text results, including existing history and the current streamed response.
+
+Both entry points share one setting remembered for the current Pi process, including before the first side-chat open and across hide/restore or `Alt+N`. The side-chat command also works during generation and is handled locally. Toggling returns the viewport to the latest content and clears text selection; main-session rendering, model context and exported transcripts remain unchanged.
 
 ### `peek_main`
 

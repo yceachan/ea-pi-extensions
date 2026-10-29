@@ -77,6 +77,7 @@ describe("Pi assistant-message formatting", () => {
   test("completed Markdown, code, tables and thinking use the main conversation renderer", () => {
     const message = reply();
     const side = new SideChatMessages(theme, 200);
+    side.setQuiet(false);
     side.setMessages([message]);
     const main = new AssistantMessageComponent(undefined, false, getMarkdownTheme(), undefined, 0);
     main.updateContent(message);

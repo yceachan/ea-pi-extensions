@@ -21,6 +21,7 @@ export const SIDE_CHAT_SHORTCUT_GROUPS = [
     ["Enter", "Send message"], ["Shift+Enter", "Insert new line"],
     ["Esc", "Stop response; hide when idle"], ["Alt+W", "Hide / restore (keep running)"],
     ["Alt+S", "Stop response, keep history"], ["?", "Show shortcuts (empty draft)"],
+    ["/btw-quiet", "Fold / expand thinking and tools"],
   ] },
   { title: "Models & thinking", items: [
     ["Ctrl+P", "Next model"], ["Ctrl+Shift+P", "Previous model"],

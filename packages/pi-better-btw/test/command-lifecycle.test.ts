@@ -191,6 +191,75 @@ for (const event of ["session_start", "session_shutdown"]) {
   });
 }
 
+for (const mode of ["fullscreen", "regular"] as const) {
+  test(`${mode}: main and side quiet commands share state before open, while hidden and across Alt+N`, async () => {
+    const f = setup(mode);
+    await f.submit("/btw-quiet");
+    await tick();
+    expect(f.overlays).toHaveLength(0);
+    await f.submit("/btw");
+    await tick();
+    const overlay: any = f.overlays[0];
+    expect(overlay.options.quiet).toBe(false);
+    const originalMessages = JSON.stringify(overlay.agent.state.messages);
+    let prompts = 0;
+    overlay.agent.prompt = async () => { prompts++; };
+    overlay.editor.setText("/btw-quiet");
+    f.terminal.input("\r");
+    await tick();
+    expect(overlay.options.quiet).toBe(true);
+    expect(prompts).toBe(0);
+    expect(JSON.stringify(overlay.agent.state.messages)).toBe(originalMessages);
+    expect(overlay.editor.getText()).toBe("");
+    await f.background();
+    await f.submit("/btw-quiet");
+    await tick();
+    expect(f.handles[0].isHidden()).toBe(true);
+    expect(overlay.options.quiet).toBe(false);
+    await f.background();
+    f.terminal.input("\x1bn");
+    await tick();
+    expect(f.overlays).toHaveLength(2);
+    expect((f.overlays[1] as any).options.quiet).toBe(false);
+    expect(f.processed).toEqual(["/btw-quiet", "/btw", "/btw-quiet"]);
+    expect(f.notices).toEqual([
+      "BTW quiet off: thinking and tools expanded",
+      "BTW quiet on: thinking and tools collapsed",
+      "BTW quiet off: thinking and tools expanded",
+    ]);
+  });
+
+  test(`${mode}: quiet defaults on; both commands work during a turn without aborting or prompting`, async () => {
+    const f = setup(mode);
+    await f.submit("/btw");
+    await tick();
+    const overlay: any = f.overlays[0];
+    expect(overlay.options.quiet).toBe(true);
+    let prompts = 0, aborts = 0;
+    let finish!: () => void;
+    overlay.agent.prompt = () => { prompts++; return new Promise<void>((resolve) => { finish = resolve; }); };
+    overlay.agent.abort = () => { aborts++; };
+    const turn = overlay.handleSubmit("question");
+    const messages = JSON.stringify(overlay.agent.state.messages);
+    overlay.editor.setText("/btw-quiet");
+    f.terminal.input("\r");
+    await tick();
+    expect(overlay.options.quiet).toBe(false);
+    expect(overlay.isStreaming).toBe(true);
+    await f.background();
+    await f.submit("/btw-quiet");
+    await tick();
+    expect(overlay.options.quiet).toBe(true);
+    expect(overlay.isStreaming).toBe(true);
+    expect(prompts).toBe(1);
+    expect(aborts).toBe(0);
+    expect(JSON.stringify(overlay.agent.state.messages)).toBe(messages);
+    expect(f.overlays).toHaveLength(1);
+    finish();
+    await turn;
+  });
+}
+
 test("Alt+N discards history, keeps model settings and returns a usable command loop", async () => {
   const f = setup();
   await f.submit("/btw");

@@ -90,6 +90,8 @@ interface SideChatOverlayOptions {
   readOnlyExtensionAllowlist: string[];
   onOverlapWarning: (path: string) => Promise<boolean>;
   onBackground: () => void;
+  quiet: boolean;
+  onToggleQuiet: () => void;
   onLayoutChange?: (layout: SideChatLayout) => void;
   getBounds?: () => OverlayBounds | undefined;
   onBusyChange?: (busy: boolean) => void;
@@ -579,6 +581,7 @@ export class SideChatOverlay implements Component, Focusable {
 
     this.agent.subscribe((e) => this.handleAgentEvent(e));
     this.messages = new SideChatMessages(theme, 20, this.palette);
+    this.messages.setQuiet(options.quiet);
     // The whole forked batch (main-session context or reopened history) is
     // injected at open time: render it as one collapsed cite line, not as
     // full history. New messages appended after the fork render normally.
@@ -777,9 +780,22 @@ export class SideChatOverlay implements Component, Focusable {
     this.messages.setToolStatus("");
   }
 
+  setQuiet(quiet: boolean): void {
+    this.options.quiet = quiet;
+    this.cancelMouseDrag();
+    this.messages.setQuiet(quiet);
+    this.options.tui.requestRender();
+  }
+
   private async handleSubmit(text: string) {
     const trimmed = text.trim();
-    if (!trimmed || this.isStreaming || this.disposed) return;
+    if (!trimmed || this.disposed) return;
+    if (trimmed === "/btw-quiet") {
+      this.editor.setText("");
+      this.options.onToggleQuiet();
+      return;
+    }
+    if (this.isStreaming) return;
 
     // New user message: reset the per-turn lane counter.
     this.laneViolations = 0;
@@ -888,6 +904,7 @@ export class SideChatOverlay implements Component, Focusable {
     const status =
       theme.fg("dim", `[Main: ${mainLabel}] `) +
       theme.fg(modeColor, `[${modeLabel}]`) +
+      (this.options.quiet ? theme.fg("dim", " [Quiet]") : "") +
       scrollMark;
     const stream = theme.fg(this.isStreaming ? "warning" : "success", " ●");
     const model = this.agent.state.model;

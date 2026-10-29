@@ -52,10 +52,17 @@ export default function sideChatExtension(pi: ExtensionAPI) {
   let overlayHandle: OverlayHandle | null = null;
   let opening: Promise<void> | null = null;
   let lifecycle = 0;
+  let quiet = true;
   const indicator = new SideChatStatusIndicator();
   let sideSettings: Pick<ForkContext, "model" | "thinkingLevel"> | null = null;
   let mouseTerminal: Terminal | null = null;
   let removeMouseListener: (() => void) | null = null;
+
+  const toggleQuiet = (ctx: ExtensionContext) => {
+    quiet = !quiet;
+    activeOverlay?.setQuiet(quiet);
+    ctx.ui.notify(`BTW quiet ${quiet ? "on: thinking and tools collapsed" : "off: thinking and tools expanded"}`, "info");
+  };
 
   /**
    * Regular mode needs a raw SGR listener. Fullscreen owns reporting and
@@ -255,6 +262,8 @@ export default function sideChatExtension(pi: ExtensionAPI) {
               promptPack,
               readOnlyExtensionAllowlist: config.readOnlyExtensionAllowlist,
               onOverlapWarning: (path) => showOverlapWarning(ctx.ui, path),
+              quiet,
+              onToggleQuiet: () => toggleQuiet(ctx),
               onBusyChange: (busy) => indicator.update(ctx.ui, busy ? "busy" : "idle"),
               onSettingsChange: (model, thinkingLevel) => { sideSettings = { model, thinkingLevel }; },
               onBackground: () => {
@@ -321,6 +330,11 @@ export default function sideChatExtension(pi: ExtensionAPI) {
     activeOverlay?.dispose();
     uninstallMouseHandler();
     indicator.dispose();
+  });
+
+  pi.registerCommand("btw-quiet", {
+    description: "Toggle side-chat thinking and tool folding (default: on)",
+    handler: async (_, ctx) => toggleQuiet(ctx),
   });
 
   pi.registerCommand("side", {
