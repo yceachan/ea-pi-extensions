@@ -1,6 +1,8 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
-import { Key, matchesKey, stripTerminalSequences, visibleWidth, wrapTextWithAnsi, type Component } from "@earendil-works/pi-tui";
-import type { Theme } from "@earendil-works/pi-coding-agent";
+import type { AssistantMessage } from "@earendil-works/pi-ai";
+import { Markdown, Key, matchesKey, sliceByColumn, stripTerminalSequences, visibleWidth, wrapTextWithAnsi, type Component } from "@earendil-works/pi-tui";
+import { AssistantMessageComponent, getMarkdownTheme, type Theme } from "@earendil-works/pi-coding-agent";
+import { paintPanel, PanelPalette, type PanelSurface } from "./side-chat-panel.ts";
 
 /**
  * A cell position in the visible chat area: index of the rendered line
@@ -49,10 +51,13 @@ export function isFramingMessage(message: AgentMessage): boolean {
 export class SideChatMessages implements Component {
   private messages: AgentMessage[] = [];
   private streamingContent = "";
+  private streamingMessage: AssistantMessage | null = null;
   private errorContent = "";
   private toolStatus = "";
   private scrollOffset = 0;
   private totalLines = 0;
+  /** Native Pi-style jump targets: users and assistants without tool calls. */
+  private promptStarts: number[] = [];
   /**
    * Active mouse selection over the visible chat lines ({@link CellPos} in
    * rendered-line coordinates). Cleared on scroll / content changes and on
@@ -97,7 +102,7 @@ export class SideChatMessages implements Component {
   /** Injected count the prefix was built for. */
   private cachedInject = -1;
 
-  constructor(private theme: Theme, private maxVisibleLines: number) {}
+  constructor(private theme: Theme, private maxVisibleLines: number, private palette = new PanelPalette()) {}
 
   /**
    * Mark the first `count` messages as injected context: they render as a
@@ -128,13 +133,20 @@ export class SideChatMessages implements Component {
   }
 
   setStreamingContent(content: string) {
+    this.streamingMessage = null;
     this.streamingContent = content;
     if (content) this.errorContent = "";
   }
 
+  setStreamingMessage(message: AssistantMessage): void {
+    this.streamingMessage = message;
+    this.streamingContent = "";
+    this.errorContent = "";
+  }
+
   setErrorContent(content: string) {
     this.errorContent = content;
-    if (content) this.streamingContent = "";
+    if (content) { this.streamingContent = ""; this.streamingMessage = null; }
   }
 
   setToolStatus(status: string) {
@@ -231,6 +243,19 @@ export class SideChatMessages implements Component {
     this.selection = null;
   }
 
+  /** Align the next/previous message start with the viewport top, as Pi does. */
+  jumpToMessage(direction: -1 | 1): void {
+    const start = Math.max(0, this.totalLines - this.maxVisibleLines - this.scrollOffset);
+    const targets = direction < 0 ? [...this.promptStarts].reverse() : this.promptStarts;
+    const target = targets.find((line) => direction < 0 ? line < start : line > start);
+    if (target === undefined) return;
+    const maxStart = Math.max(0, this.totalLines - this.maxVisibleLines);
+    const top = Math.min(target, maxStart);
+    this.scrollOffset = maxStart - top;
+    this.frozenAnchor = this.scrollOffset === 0 ? null : top + this.maxVisibleLines;
+    this.selection = null;
+  }
+
   getScrollOffset(): number {
     return this.scrollOffset;
   }
@@ -304,11 +329,23 @@ export class SideChatMessages implements Component {
   render(width: number): string[] {
     this.ensureCachedLines(width);
     const lines: string[] = [...this.prefixLines];
+    const surfaces: PanelSurface[] = this.prefixLines.map(() => "body");
+    const append = (content: string[], surface: PanelSurface = "body") => {
+      lines.push(...content);
+      surfaces.push(...content.map(() => surface));
+    };
+    this.promptStarts = [];
+    const isPrompt = (message: AgentMessage) => message.role === "user" ||
+      (message.role === "assistant" && !message.content.some((part) => part.type === "toolCall"));
     const n = this.messages.length;
     for (let i = 0; i < n; i++) {
       const messageLines = this.messageCache[i];
       if (messageLines.length) {
-        lines.push(...messageLines, "");
+        const message = this.messages[i]!;
+        const role = message.role;
+        if (isPrompt(message)) this.promptStarts.push(lines.length);
+        append(messageLines, role === "user" ? "user" : "body");
+        append([""]);
       }
     }
 
@@ -316,14 +353,19 @@ export class SideChatMessages implements Component {
     // frame — bounded by the current chunk, orders of magnitude cheaper than
     // the stored history.
     if (this.errorContent) {
-      lines.push(...wrapTextWithAnsi(this.theme.fg("error", "[Error]: ") + this.errorContent, width));
+      append(wrapTextWithAnsi(this.theme.fg("error", "[Error]: ") + this.errorContent, width));
+    } else if (this.streamingMessage) {
+      const content = this.renderAssistant(this.streamingMessage, width, true);
+      if (content.length && isPrompt(this.streamingMessage)) this.promptStarts.push(lines.length);
+      append(content);
     } else if (this.streamingContent) {
-      lines.push(...wrapTextWithAnsi(this.theme.fg("text", "[Assistant]: ") + this.streamingContent + "▌", width));
+      this.promptStarts.push(lines.length);
+      append(new Markdown(this.streamingContent, 0, 0, getMarkdownTheme()).render(width));
     }
 
     if (this.toolStatus) {
-      if (lines.length) lines.push("");
-      lines.push(...wrapTextWithAnsi(this.theme.fg("muted", `[Tool]: ${this.toolStatus}`), width));
+      if (lines.length) append([""]);
+      append(wrapTextWithAnsi(this.theme.fg("muted", `[Tool]: ${this.toolStatus}`), width));
     }
 
     this.totalLines = lines.length;
@@ -367,7 +409,17 @@ export class SideChatMessages implements Component {
         if (highlighted !== null) visible[i] = highlighted;
       }
     }
-    return visible;
+    // Paint after hit-testing/selection so padding never changes copied text or
+    // coordinates, and selecting a line keeps its role's background intact.
+    return visible.map((line, index) => {
+      const surface = surfaces[start + index];
+      // Use the existing left padding for a decorative rail. Apply it only
+      // after selection/copy mapping so text stays aligned and copies cleanly.
+      if (surface === "user" && width >= 5) {
+        line = this.theme.fg("borderMuted", "│") + sliceByColumn(line, 1, width - 1);
+      }
+      return paintPanel(this.theme, surface ?? "body", line, width, this.palette);
+    });
   }
 
   /** Clamp a cell position to the currently rendered lines. */
@@ -404,22 +456,30 @@ export class SideChatMessages implements Component {
     return plain.slice(0, s) + SELECTION_STYLE + plain.slice(s, e) + SELECTION_STYLE_END + plain.slice(e);
   }
 
+  private renderAssistant(message: AssistantMessage, width: number, streaming = false): string[] {
+    // Reuse Pi's own renderer: Markdown, highlighted code, tables, thinking and
+    // partial-response errors behave like the main conversation. Keep our own
+    // outer layout and selection math; do not emit shell-integration zones
+    // from a transient overlay nested inside the main terminal transcript.
+    const component = new AssistantMessageComponent(undefined, false, getMarkdownTheme(), undefined, 0);
+    component.updateContent(message, streaming);
+    const lines = component.render(width).map((line) => line.replace(/\x1b\]133;[ABC]\x07/g, ""));
+    while (lines.length && !stripTerminalSequences(lines[0]!).trim()) lines.shift();
+    while (lines.length && !stripTerminalSequences(lines[lines.length - 1]!).trim()) lines.pop();
+    return lines;
+  }
+
   private renderMessage(msg: AgentMessage, width: number): string[] {
     const { theme } = this;
 
     if (msg.role === "user") {
       const content = typeof msg.content === "string" ? msg.content : msg.content.map((b) => b.type === "text" ? b.text : "[image]").join("");
-      return wrapTextWithAnsi(theme.fg("accent", "[You]: ") + content, width);
+      const inset = Math.min(2, Math.max(0, Math.floor((width - 1) / 2)));
+      return ["", ...wrapTextWithAnsi(content, Math.max(1, width - inset * 2)).map((line) =>
+        " ".repeat(inset) + theme.fg("userMessageText", line)), ""];
     }
 
-    if (msg.role === "assistant") {
-      const text = msg.content.filter((b) => b.type === "text").map((b) => b.text).join("\n");
-      if (text) return wrapTextWithAnsi(theme.fg("text", "[Assistant]: ") + text, width);
-      if ("errorMessage" in msg && msg.errorMessage) {
-        return wrapTextWithAnsi(theme.fg("error", "[Error]: ") + String(msg.errorMessage), width);
-      }
-      return [];
-    }
+    if (msg.role === "assistant") return this.renderAssistant(msg, width);
 
     if (msg.role === "toolResult") {
       const fullText = msg.content[0]?.type === "text" ? msg.content[0].text : "";

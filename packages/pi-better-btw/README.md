@@ -17,6 +17,8 @@
 [![npm version](https://img.shields.io/npm/v/@yceachan/pi-better-btw?style=for-the-badge)](https://www.npmjs.com/package/@yceachan/pi-better-btw)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
 
+Requires Pi 1.4 or later.
+
 ```bash
 pi install npm:@yceachan/pi-better-btw
 # in pi tui
@@ -25,7 +27,7 @@ pi install npm:@yceachan/pi-better-btw
 
 You're in the middle of a longer task and want to ask something small without derailing the main thread — check an API detail, sanity-check an approach, search something, or peek at what the main agent is doing. Open the btw TUI overlay, ask, close it. The main thread never gets interrupted.
 
-<img src="https://ali-oss-yceachan.oss-cn-chengdu.aliyuncs.com/img-bed-typora/image-20260817171045290.png" alt="pi-better-btw overlay" />
+<img src="preview.jpg" alt="pi-better-btw side-chat preview" width="1100" />
 
 ## Feat
 
@@ -56,7 +58,13 @@ You're in the middle of a longer task and want to ask something small without de
 
 Open the side chat with `/btw` (alias `/side`) or `Alt+W` (which also toggles background/display). Ask a question and press `Enter`.
 
-Press `Esc` to close it. Reopen with `/btw` or `Alt+W` to continue where you left off.
+`Esc` requests confirmed close, with Keep selected by default. Confirming stops generation and discards the side chat; `Esc` inside a picker, confirmation or help page returns to the chat. Use `Alt+W` to hide/restore without stopping generation, preserving history, draft and scroll position. `/btw-close` requests confirmed close from the main editor.
+
+The default main footer shows `[● side chat]` beside its model: yellow while generating, green when idle, including while hidden. It disappears on close. Custom footers are not replaced; they receive a standard keyed status fallback.
+
+The side chat has its own model and thinking level, initially inherited from the main session but independently remembered for the current Pi process. `Ctrl+P` / `Ctrl+Shift+P` cycle scoped models, `Shift+Tab` cycles supported thinking levels, and `Alt+P` is an alternative backward-model key. These actions follow Pi's configured bindings. `Alt+M` opens searchable model selection; `Alt+T` opens thinking selection. Stop a running turn with `Alt+S` before switching. Main-session settings are never changed.
+
+The borderless panel follows the main theme and terminal colors, subtly separated from the main background. User messages have padded cards with a thin left rail; the rail is decorative and is not copied. AI replies use Pi's native Markdown/code/thinking renderer without a separate message background. The inset editor grows from three rows to at most five content rows, keeping its cursor visible. Its `›` marker and “问点什么…” placeholder are presentation only. Common hints fit on one row when space permits; type `?` on an empty draft for the full responsive shortcut page.
 
 | Shortcut | Action |
 | -------- | ------ |
@@ -75,13 +83,15 @@ What is the main agent doing right now?
 What changed since I opened this side chat?
 ```
 
-**Non-capturing overlay + backgrounding** — the overlay opens at the top of the screen so the main editor stays visible underneath. It stays focused while open; `Alt+W` backgrounds it (hidden, the agent keeps streaming) to hand the keyboard back, and `Alt+W` restores it.
+**Backgrounding** — the default overlay is centered at 90% terminal width and up to 92% height. `Alt+W` hides it while the agent keeps streaming, handing the keyboard back to the main session; `Alt+W` restores it.
 
-**Taller chat area** — the message area is ~2.5x taller than upstream, so long answers and tool output stay readable; it adapts to small terminals (never overflows, always leaves the main editor visible).
+**Live layouts** — `Ctrl+Alt+←` fills the terminal, `Ctrl+Alt+↑` selects the original smaller top-center window (85% width), `Ctrl+Alt+↓` restores the larger centered floating window, and `Ctrl+Alt+→` uses the right half at full height. These keys also work inside pickers/help. Switching preserves the agent, history and draft; only the active text selection is cleared because wrapping changes. Layouts adapt to terminal resizing and reserve the actual multiline editor height.
 
-**Scroll the history** — `PgUp`/`PgDn` scroll by a page, `Shift+↑`/`Shift+↓` by a few lines, and the mouse wheel scrolls when the pointer is over the chat. When scrolled away from the latest message, a `[↑N]` indicator appears in the header and the hint bar switches to `↑N · PgDn/Wheel ↓`. While streaming, the viewport follows the bottom until you scroll away, then freezes content-anchored (new lines grow the scroll offset instead of sliding the visible content); it resumes following once you're back at the bottom or a new message arrives.
+**Message navigation** — `Ctrl+↑`/`Ctrl+↓` jump between user prompts and final AI responses, skipping tools and following Pi's `tui.altScreen.previousPrompt`/`nextPrompt` remaps. Streaming AI text is included; the draft and running agent are preserved.
 
-**Mouse select + hotkey copy** — drag to select chat text (inverse-video highlight); double-click selects the whole rendered line. Copying is hotkey-only: `Ctrl+C` / `Ctrl+Shift+C` copies the retained selection through the native clipboard cascade (`wl-copy`/`xclip`, OSC 52 fallback); the selection stays highlighted so repeated presses re-copy. Dragging never touches the clipboard, so mouse interaction stays off the event loop. In Pi 1.0 fullscreen mode, the overlay uses Pi's normalized mouse dispatch and drag capture; clicking the input area positions its cursor. Backgrounding or closing the chat leaves Pi's main-screen mouse controls intact. In regular mode, extension-owned mouse reporting follows overlay *visibility*, so backgrounding restores terminal-native selection.
+**Scroll the history** — `PgUp`/`PgDn` scroll by a page, `Shift+↑`/`Shift+↓` by a few lines, and the mouse wheel scrolls when the pointer is over the chat. When scrolled away from the latest message, a `[↑N]` indicator appears in the header. While streaming, the viewport follows the bottom until you scroll away, then freezes content-anchored (new lines grow the scroll offset instead of sliding the visible content); it resumes following once you're back at the bottom or a new message arrives.
+
+**Mouse select + hotkey copy** — drag to select chat text (inverse-video highlight); double-click selects the whole rendered line. Copying is hotkey-only: `Ctrl+C` / `Ctrl+Shift+C` copies the retained selection through the native clipboard cascade (`wl-copy`/`xclip`, OSC 52 fallback); the selection stays highlighted so repeated presses re-copy. Dragging never touches the clipboard, so mouse interaction stays off the event loop. In Pi fullscreen mode, the overlay uses Pi's normalized mouse dispatch and drag capture; clicking the input area positions its cursor. Backgrounding or closing the chat leaves Pi's main-screen mouse controls intact. In regular mode, extension-owned mouse reporting follows overlay *visibility*, so backgrounding restores terminal-native selection.
 
 **Transcript export** — `Alt+E` dumps the btw history (forked context, framing block, conversation, in-flight stream) to `$CWD/.agents/eval/pi-better-btw-<timestamp>.md` as a markdown diagnostic artifact, useful for debugging feature work.
 
@@ -91,7 +101,15 @@ What changed since I opened this side chat?
 | ---- | ---- |
 | `Alt+W` | Open (when closed) / background (when visible) / restore (when hidden) |
 | `Enter` | Send message |
-| `Esc` | Interrupt streaming, or close when idle |
+| `Esc` | Request confirmed close; return to chat from pickers/confirmation/help |
+| `?` | Full shortcut page (empty draft only) |
+| `Ctrl+Alt+←` / `↑` / `↓` / `→` | Fullscreen / smaller floating / larger floating / right-half layout |
+| `Ctrl+↑` / `Ctrl+↓` | Previous / next message (Pi bindings) |
+| `Ctrl+P` / `Ctrl+Shift+P` | Cycle side-chat model forward / backward (Pi bindings) |
+| `Alt+P` | Cycle model backward (alternative key) |
+| `Shift+Tab` | Cycle supported thinking levels (Pi binding) |
+| `Alt+M` / `Alt+T` | Search models / pick thinking level |
+| `Alt+S` | Stop the current turn, keeping the chat |
 | `Alt+R` | Re-fork from latest main context |
 | `Alt+N` | Start empty conversation |
 | `Alt+E` | Export the btw chat history to `$CWD/.agents/eval/pi-better-btw-<timestamp>.md` |
@@ -112,6 +130,10 @@ Opens the side chat overlay. Alias for `/side`.
 ### `/side`
 
 Opens the side chat overlay (upstream name kept as a compatibility alias).
+
+### `/btw-close`
+
+Requests confirmed close, restoring a hidden chat first. Does nothing without an active side chat.
 
 ### `peek_main`
 
@@ -164,13 +186,17 @@ The bundled `config.json` ships the official pi tool set in the read-only allowl
 
 ## How It Works
 
-The extension clones the current session context, creates a separate agent instance with all extension-registered tools, and renders it in a TUI overlay. Closing saves the conversation in memory so reopening restores it. Backgrounding (`Alt+W`) hides the overlay via the TUI's overlay handle while the agent keeps running.
+The extension clones the current session context, creates a separate agent instance with all extension-registered tools, and renders it in a TUI overlay. Hiding (`Alt+W`) preserves the agent and draft while streaming continues. Confirmed close destroys the chat; the next opening forks fresh main context.
+
+The default-footer badge adapts the exported `FooterComponent` renderer without editing installed Pi files or taking over `setFooter`. It restores the renderer on shutdown. A keyed `setStatus` remains available when custom footers are switched at runtime. Model-row placement depends on Pi footer internals, covered by a real-renderer regression test.
+
+Side-chat requests use `modelRegistry.streamSimple` so Pi's model runtime handles authentication, request headers and virtual-model routing.
 
 The btw context keeps the main lane's system prompt in the system slot and injects the fork snapshot verbatim, so the btw request head is a token prefix of the main request (gateway prefix-cache hits). `forkSurgery` (`srcs/fork-surgery.ts`) makes the trailing tool exchange gateway-legal on the snapshot; the prompt pack supplies all injected prompt text; lane enforcement wraps `beforeToolCall`/`afterToolCall` (`srcs/side-chat-overlay.ts`) in the read-only lane only.
 
 Main-agent tool execution events are tracked to maintain a set of written file paths (`srcs/file-activity-tracker.ts`); write-capable tools are wrapped to warn before touching those paths (`srcs/tool-wrapper.ts`).
 
-In fullscreen mode (Pi 1.0's default), `SideChatOverlay.handleMouse()` receives component-local events from Pi. It handles wheel scrolling, captures chat selection drags, and forwards input-area clicks to the editor. Clipboard copying stays hotkey-only. Pi owns terminal mouse reporting throughout the overlay lifecycle. In regular mode, a raw SGR listener enables reporting only while the overlay is visible and consumes mouse sequences before they reach the editor.
+In Pi fullscreen mode, `SideChatOverlay.handleMouse()` receives component-local events from Pi. It handles wheel scrolling, captures chat selection drags, and forwards input-area clicks to the editor. Clipboard copying stays hotkey-only. Pi owns terminal mouse reporting throughout the overlay lifecycle. In regular mode, a raw SGR listener enables reporting only while the overlay is visible and consumes mouse sequences before they reach the editor.
 
 `peek_main` reads the current session branch on demand and returns a compact summary.
 
@@ -187,6 +213,12 @@ Structure:
 │   ├── fork-surgery.ts    # shared-prefix fork snapshot surgery (gateway-legal tails)
 │   ├── side-chat-overlay.ts  # TUI overlay, agent lifecycle, lane enforcement, mouse routing
 │   ├── side-chat-messages.ts # message rendering, wrapping, selection, scrolling
+│   ├── side-chat-status.ts   # main-footer indicator and keyed fallback
+│   ├── side-chat-dialog.ts   # model/thinking/close confirmation cards
+│   ├── side-chat-help.ts     # responsive hints and shortcut page
+│   ├── side-chat-input.ts    # input card, cursor and mouse-coordinate mapping
+│   ├── side-chat-panel.ts    # theme/terminal-derived surfaces
+│   ├── side-chat-layout.ts   # live layout presets
 │   ├── side-chat-mouse.ts    # minimal SGR mouse parsing
 │   ├── side-chat-export.ts   # Alt+E transcript export
 │   ├── tool-wrapper.ts       # write-path overlap warnings
@@ -195,6 +227,7 @@ Structure:
 ├── test/                  # bun test suites (config resolution, mouse select)
 ├── config.json            # bundled defaults (promptPack manifest + read-only allowlist)
 ├── banner.png
+├── preview.jpg
 └── README.md
 ```
 
@@ -203,7 +236,7 @@ Commands:
 ```bash
 bun install         # install dependencies
 bun run typecheck   # tsc --noEmit -p tsconfig.json
-bun test            # bun test test/  (run serially, see bunfig.toml)
+bun run test        # registered automated tests (serial, see bunfig.toml)
 ```
 
 The published package ships `srcs/`, `prompts/`, `config.json` and the docs; tests stay out of the tarball. To load the extension in pi during development, point pi's extension loader at `./srcs/index.ts` and `/reload` after edits (no build step — pi loads TypeScript directly).
@@ -215,7 +248,7 @@ The published package ships `srcs/`, `prompts/`, `config.json` and the docs; tes
 - Does not merge messages back into the main thread
 - Bash overlap detection is heuristic — catches common write patterns, not all
 - `peek_main` is on-demand, not live
-- Fullscreen mouse support uses Pi 1.0's component mouse API; the regular-mode SGR path remains available
+- Requires Pi 1.4+; fullscreen mouse support uses Pi's component mouse API, with the regular-mode SGR path retained
 
 ## License
 

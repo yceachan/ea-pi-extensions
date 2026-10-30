@@ -6,7 +6,7 @@ import {
   type ThinkingLevel,
 } from "@earendil-works/pi-agent-core";
 import type { Model } from "@earendil-works/pi-ai";
-import { streamSimple } from "@earendil-works/pi-ai/compat";
+import { clampThinkingLevel, getSupportedThinkingLevels } from "@earendil-works/pi-ai/models";
 import {
   buildSessionContext,
   convertToLlm,
@@ -15,6 +15,9 @@ import {
   createReadOnlyTools,
   getSelectListTheme,
   type ModelRegistry,
+  type ScopedModel,
+  type KeybindingsManager,
+  type AppKeybinding,
   type SessionEntry,
   type Theme,
   type ThemeColor,
@@ -22,6 +25,7 @@ import {
 import { Type } from "@sinclair/typebox";
 import {
   Editor,
+  getKeybindings,
   Key,
   matchesKey,
   truncateToWidth,
@@ -31,6 +35,8 @@ import {
   type TUI,
   type TuiMouseEvent,
   type TuiMouseEventResult,
+  type OverlayBounds,
+  type TerminalColors,
 } from "@earendil-works/pi-tui";
 import type { FileActivityTracker } from "./file-activity-tracker.ts";
 import { forkSurgery } from "./fork-surgery.ts";
@@ -50,6 +56,11 @@ import {
   type CellPos,
 } from "./side-chat-messages.ts";
 import { SIDE_CHAT_SHORTCUT } from "./shortcuts.ts";
+import { SideChatHelp, actionShortcutLabel, shortcutHint, type ShortcutBindings } from "./side-chat-help.ts";
+import { SideChatDialog } from "./side-chat-dialog.ts";
+import { paintPanel, PanelPalette } from "./side-chat-panel.ts";
+import { renderSideChatInput, type SideChatInputFrame } from "./side-chat-input.ts";
+import { sideChatLayoutHeight, type SideChatLayout } from "./side-chat-layout.ts";
 import { wrapToolsWithOverlapDetection } from "./tool-wrapper.ts";
 
 export interface ForkContext {
@@ -70,6 +81,8 @@ interface SideChatOverlayOptions {
   forkContext: ForkContext;
   tracker: FileActivityTracker;
   modelRegistry: ModelRegistry;
+  getScopedModels?: () => readonly ScopedModel[];
+  keybindings?: Pick<KeybindingsManager, "matches"> & ShortcutBindings;
   sessionManager: SessionView;
   /** Prompt texts resolved from config.json `promptPack` (fresh per fork). */
   promptPack: PromptPack;
@@ -77,6 +90,10 @@ interface SideChatOverlayOptions {
   readOnlyExtensionAllowlist: string[];
   onOverlapWarning: (path: string) => Promise<boolean>;
   onBackground: () => void;
+  onLayoutChange?: (layout: SideChatLayout) => void;
+  getBounds?: () => OverlayBounds | undefined;
+  onBusyChange?: (busy: boolean) => void;
+  onSettingsChange?: (model: Model<any>, thinkingLevel: ThinkingLevel) => void;
   onClose: (
     action: "close" | "refork" | "clear",
     messages: AgentMessage[],
@@ -87,12 +104,8 @@ interface SideChatOverlayOptions {
   copyText?: (text: string) => Promise<void>;
 }
 
-/** Overlay max-height used for the side chat (adapted for small terminals at render time). */
-export const SIDE_CHAT_OVERLAY_MAX_HEIGHT = "88%";
-export const SIDE_CHAT_OVERLAY_MARGIN_TOP = 1;
-/** Horizontal margins, matching index.ts overlayOptions. */
-const SIDE_CHAT_OVERLAY_MARGIN_LEFT = 2;
-const SIDE_CHAT_OVERLAY_MARGIN_RIGHT = 2;
+/** Normal header: top padding, title + model row, bottom padding, body gap. */
+export const SIDE_CHAT_MESSAGE_TOP = 4;
 /** Two quick presses within this window (same line) count as a double-click → select line. */
 const DOUBLE_CLICK_INTERVAL_MS = 500;
 /** Wheel scroll step in lines (matches the previous mouse handler). */
@@ -122,19 +135,6 @@ interface ChatGeometry {
 }
 
 /**
- * Chat area height (message lines): 2.5x the original (~0.35 * rows - 10),
- * adapted to small terminals so the overlay never overflows the screen and
- * always leaves a few rows of the main editor visible.
- */
-export function computeSideChatHeight(rows: number): number {
-  const original = Math.max(3, Math.floor(rows * 0.35) - 10);
-  const desired = Math.round(original * 2.5);
-  // 7 fixed rows (borders, header, editor, hints) around the message area.
-  const overlayCap = Math.max(9, Math.min(Math.floor(rows * 0.88), rows - 4));
-  return Math.max(3, Math.min(desired, overlayCap - 7));
-}
-
-/**
  * Shared-prefix layout (#9, reverses decision #6): the main lane's system
  * prompt stays in the system slot (verbatim, token-identical request head),
  * and the fork snapshot is injected verbatim below it — main and btw share
@@ -155,19 +155,26 @@ export class SideChatOverlay implements Component, Focusable {
   private agent: Agent;
   private messages: SideChatMessages;
   private editor: Editor;
+  private palette = new PanelPalette();
+  private unsubscribeColorScheme?: () => void;
+  private colorQuery = 0;
   private isStreaming = false;
   private streamingContent = "";
   private toolMode: "full" | "read-only" = "read-only";
   private _focused = true;
   private disposed = false;
+  private dialog: SideChatDialog | SideChatHelp | null = null;
   private forkLeafId: string | null;
   private peekMainTool: AgentTool;
   private spinnerInterval: NodeJS.Timeout | null = null;
   private spinnerFrame = 0;
   private lastRenderHeight = 0;
+  private lastRenderWidth = 0;
+  private layout: SideChatLayout = "floating";
+  private messageTop = SIDE_CHAT_MESSAGE_TOP;
   /** Geometry of the last render (screen coords), used for mouse hit-testing. */
   private geometry: ChatGeometry | null = null;
-  private editorLayout: { top: number; height: number; width: number } | null = null;
+  private editorLayout: SideChatInputFrame["editor"] | null = null;
   /** Mouse drag state: set while a left-button selection drag is in progress. */
   private mouseDragging = false;
   private mouseAnchor: CellPos = { line: 0, col: 0 };
@@ -192,33 +199,19 @@ export class SideChatOverlay implements Component, Focusable {
   private abortAfterInject = false;
 
   /**
-   * Chat area height (message lines): 2.5x the original (~0.35 * rows - 10),
-   * adapted to small terminals so the overlay never overflows the screen and
-   * always leaves a few rows of the main editor visible.
-   */
-  private computeChatHeight(): number {
-    return computeSideChatHeight(this.options.tui.terminal.rows);
-  }
-
-  /**
    * Screen rectangle occupied by the overlay (0-based), used to route mouse
    * wheel events to the chat. Returns null when the overlay is gone.
    */
   getViewport(): { topRow: number; leftCol: number; width: number; height: number } | null {
     if (this.disposed) return null;
-    const rows = this.options.tui.terminal.rows;
-    const maxHeight = Math.max(
-      1,
-      Math.min(
-        parsePercent(SIDE_CHAT_OVERLAY_MAX_HEIGHT, rows),
-        Math.max(1, rows - SIDE_CHAT_OVERLAY_MARGIN_TOP),
-      ),
-    );
+    // Bounds are authoritative after Pi has placed the current frame. Do not
+    // query them in render(): that would return the previous layout's bounds.
+    const bounds = this.options.getBounds?.();
+    if (bounds) return { topRow: bounds.row, leftCol: bounds.col, width: bounds.width, height: bounds.height };
     return {
-      topRow: SIDE_CHAT_OVERLAY_MARGIN_TOP,
-      leftCol: (this.geometry?.contentCol ?? 2) - 2,
-      width: (this.geometry?.innerWidth ?? 0) + 4,
-      height: Math.min(this.lastRenderHeight, maxHeight),
+      ...this.getFallbackViewport(),
+      width: this.lastRenderWidth,
+      height: this.lastRenderHeight,
     };
   }
 
@@ -248,15 +241,22 @@ export class SideChatOverlay implements Component, Focusable {
   /** Fullscreen entry point: Pi supplies overlay-local coordinates and owns capture. */
   handleMouse(event: TuiMouseEvent): TuiMouseEventResult | undefined {
     if (this.disposed) return { handled: true, render: false };
+    if (this.dialog) {
+      if (this.dialog instanceof SideChatHelp && event.type === "wheel") {
+        this.dialog.scrollBy(event.wheelDelta ?? 0);
+        return { handled: true, render: true };
+      }
+      return { handled: true, render: false, focus: event.type === "press" };
+    }
     // Use the dispatched rectangle, not a guessed percentage/terminal origin.
     // Captured drag coordinates can lie outside this rectangle.
     if (this.geometry) {
       this.geometry = {
         ...this.geometry,
-        msgTopRow: event.screenY - event.y + 3,
+        msgTopRow: event.screenY - event.y + this.messageTop,
         contentCol: event.screenX - event.x + 2,
         innerWidth: Math.max(0, event.width - 4),
-        msgHeight: Math.max(0, Math.min(this.geometry.msgHeight, event.height - 3)),
+        msgHeight: Math.max(0, Math.min(this.geometry.msgHeight, event.height - this.messageTop)),
       };
     }
     if (event.type === "wheel") {
@@ -266,16 +266,16 @@ export class SideChatOverlay implements Component, Focusable {
     const editor = this.editorLayout;
     if (
       !this.mouseDragging && editor && event.y >= editor.top &&
-      event.y < editor.top + editor.height && event.x >= 2 &&
-      event.x < 2 + editor.width
+      event.y < editor.top + editor.height && event.x >= editor.left &&
+      event.x < editor.left + editor.width
     ) {
       if (event.type === "press") this.cancelMouseDrag();
       const result = this.editor.handleMouse?.({
         ...event,
-        x: event.x - 2,
-        y: event.y - editor.top,
+        x: event.x - editor.left,
+        y: event.y - editor.top + editor.sourceOffset,
         width: editor.width,
-        height: editor.height,
+        height: editor.sourceHeight,
       });
       // Keep keyboard focus on the overlay so its shortcuts still work.
       return result ?? { handled: true, render: false };
@@ -296,7 +296,7 @@ export class SideChatOverlay implements Component, Focusable {
       col: event.screenX + 1,
       row: event.screenY + 1,
       isRelease: event.type === "release",
-    });
+    }, false);
     return {
       handled: true,
       capture: this.mouseDragging,
@@ -311,7 +311,22 @@ export class SideChatOverlay implements Component, Focusable {
    * are 1-based (as reported by the terminal); the chat area is hit-tested
    * against the geometry of the last render.
    */
-  handleMouseEvent(event: SgrMouseEvent): void {
+  handleMouseEvent(event: SgrMouseEvent, syncBounds = true): void {
+    if (this.disposed) return;
+    if (syncBounds && this.geometry) {
+      const viewport = this.getViewport();
+      if (viewport) {
+        this.geometry.msgTopRow = viewport.topRow + this.messageTop;
+        this.geometry.contentCol = viewport.leftCol + 2;
+      }
+    }
+    if (this.dialog) {
+      if (this.dialog instanceof SideChatHelp && isWheelEvent(event)) {
+        this.dialog.scrollBy(-wheelDirection(event) * WHEEL_SCROLL_LINES);
+        this.options.tui.requestRender();
+      }
+      return;
+    }
     if (isWheelEvent(event)) {
       this.scrollByLines(wheelDirection(event) * WHEEL_SCROLL_LINES);
       return;
@@ -488,7 +503,9 @@ export class SideChatOverlay implements Component, Focusable {
     });
 
     this.agent = new Agent({
-      streamFn: streamSimple,
+      // Registry streaming supports configured credentials, headers and virtual
+      // models; the global compatibility streamer cannot resolve virtual models.
+      streamFn: (model, context, options) => modelRegistry.streamSimple(model, context, options),
       initialState: {
         // Shared-prefix layout (#9): the MAIN persona stays in the system
         // slot so the request head matches the main lane token-for-token.
@@ -499,11 +516,6 @@ export class SideChatOverlay implements Component, Focusable {
         messages: [...forkedMessages, framingMessage],
       },
       convertToLlm,
-      getApiKey: async (provider) => {
-        const key = await modelRegistry.getApiKeyForProvider(provider);
-        if (!key) throw new Error("No API key available");
-        return key;
-      },
       // Transient tail injections (present in the LLM request only, never
       // stored in the transcript), texts from the prompt pack:
       // - focus anchor: every turn, both modes (recency position);
@@ -569,7 +581,7 @@ export class SideChatOverlay implements Component, Focusable {
     });
 
     this.agent.subscribe((e) => this.handleAgentEvent(e));
-    this.messages = new SideChatMessages(theme, 20);
+    this.messages = new SideChatMessages(theme, 20, this.palette);
     // The whole forked batch (main-session context or reopened history) is
     // injected at open time: render it as one collapsed cite line, not as
     // full history. New messages appended after the fork render normally.
@@ -585,6 +597,21 @@ export class SideChatOverlay implements Component, Focusable {
       { paddingX: 0 },
     );
     this.editor.onSubmit = (text) => this.handleSubmit(text);
+    this.unsubscribeColorScheme = tui.onTerminalColorSchemeChange?.(() => this.queryPanelColors());
+    this.queryPanelColors();
+  }
+
+  private queryPanelColors(): void {
+    const tui = this.options.tui;
+    if (!tui.queryTerminalColors) return;
+    const generation = ++this.colorQuery;
+    const apply = (colors: TerminalColors) => {
+      if (this.disposed || generation !== this.colorQuery) return;
+      this.palette.setTerminalColors(colors);
+      this.invalidate();
+      tui.requestRender();
+    };
+    void tui.queryTerminalColors({ timeoutMs: 100, onLateReply: apply }).then(apply).catch(() => {});
   }
 
   private createPeekMainTool(sessionManager: SessionView): AgentTool {
@@ -764,6 +791,7 @@ export class SideChatOverlay implements Component, Focusable {
 
     this.editor.setText("");
     this.isStreaming = true;
+    this.options.onBusyChange?.(true);
     this.streamingContent = "";
     // A new user message resumes bottom-following even if the view was frozen.
     this.messages.resumeFollowing();
@@ -782,6 +810,7 @@ export class SideChatOverlay implements Component, Focusable {
       }
     } finally {
       this.isStreaming = false;
+      if (!this.disposed) this.options.onBusyChange?.(false);
       this.streamingContent = "";
       this.stopSpinner();
       this.messages.setStreamingContent("");
@@ -800,7 +829,11 @@ export class SideChatOverlay implements Component, Focusable {
     ) {
       this.stopSpinner();
       this.streamingContent += event.assistantMessageEvent.delta;
-      this.messages.setStreamingContent(this.streamingContent);
+      if (event.message.role === "assistant") this.messages.setStreamingMessage(event.message);
+    } else if (event.type === "message_update") {
+      // Thinking-only updates and mixed thinking/text blocks use the same
+      // renderer as completed responses, not a separate plain-text preview.
+      if (event.message.role === "assistant") this.messages.setStreamingMessage(event.message);
     } else if (event.type === "message_end") {
       this.messages.setMessages([...this.agent.state.messages]);
       this.messages.setStreamingContent("");
@@ -825,6 +858,7 @@ export class SideChatOverlay implements Component, Focusable {
   }
 
   render(width: number): string[] {
+    this.lastRenderWidth = width;
     if (width < 4) {
       this.geometry = null;
       this.editorLayout = null;
@@ -834,8 +868,16 @@ export class SideChatOverlay implements Component, Focusable {
     }
 
     const { theme, tracker } = this.options;
+    const height = sideChatLayoutHeight(this.options.tui.terminal.rows, this.layout);
+    if (this.dialog) {
+      this.geometry = null;
+      this.editorLayout = null;
+      this.cancelMouseDrag();
+      const lines = this.dialog.render(width, this.dialog instanceof SideChatHelp ? height : Math.min(height, 18), theme, this.palette);
+      this.lastRenderHeight = lines.length;
+      return lines;
+    }
     const innerWidth = width - 4;
-    const borderColor: ThemeColor = "border";
 
     const title = "Side Chat";
     const mainLabel = tracker.writeCount
@@ -850,70 +892,213 @@ export class SideChatOverlay implements Component, Focusable {
       theme.fg("dim", `[Main: ${mainLabel}] `) +
       theme.fg(modeColor, `[${modeLabel}]`) +
       scrollMark;
-    const stream = this.isStreaming ? theme.fg("warning", " ●") : "";
+    const stream = theme.fg(this.isStreaming ? "warning" : "success", " ●");
+    const model = this.agent.state.model;
     const left = theme.fg("accent", title) + stream;
-
-    const escHint = this.isStreaming ? "Esc stop" : "Esc close";
-    const modeHint =
-      this.toolMode === "read-only" ? "C+t Edit" : "C+t Readonly";
-    const scrolled = !this.messages.isAtBottom();
-    const scrollHint = scrolled
-      ? theme.fg(
-          "warning",
-          `↑${this.messages.getScrollOffset()} · PgDn/Wheel ↓`,
-        )
-      : "Pg/Scr ↑↓";
-    // Fixed two-row key-hint bar: the rows never collapse onto one line on
-    // wide terminals, so the layout (and the message-area height) is stable
-    // everywhere. Rows longer than the frame are truncated with "…" by
-    // renderSideChatFrame; one message row is traded for the second hint row.
-    const hintLines = buildSideChatHintLines({ scrollHint, escHint, modeHint });
-    const maxLines = Math.max(
-      3,
-      this.computeChatHeight() - (hintLines.length - 1),
-    );
+    const modelDetails = theme.fg("muted", `${model?.provider ?? ""}/${model?.id ?? "no-model"}  ·  ${this.agent.state.thinkingLevel}`);
+    const compact = height < 18;
+    const minimal = height < 8;
+    this.messageTop = minimal ? 0 : compact ? 2 : SIDE_CHAT_MESSAGE_TOP;
+    const hintLines = minimal ? [] : buildSideChatHintLines(innerWidth, this.options.keybindings, theme);
+    const bottomPadding = compact ? 0 : 1;
+    const inputBudget = Math.max(1, Math.min(7, Math.floor(height / 3) + 2,
+      height - this.messageTop - hintLines.length - bottomPadding - 1));
+    const input = renderSideChatInput(this.editor, theme, width, inputBudget, this.palette);
+    // Budget the card's actual height; an empty draft occupies only three rows.
+    const chrome = this.messageTop + input.lines.length + hintLines.length + bottomPadding;
+    const maxLines = Math.max(0, height - chrome);
     this.messages.setMaxVisibleLines(maxLines);
-    const msgLines = this.messages.render(innerWidth);
+    const msgLines = maxLines > 0 ? this.messages.render(innerWidth) : [];
     for (let i = msgLines.length; i < maxLines; i++) msgLines.push("");
 
-    const editorLines = this.editor.render(innerWidth);
-    this.editorLayout = {
-      top: 4 + msgLines.length,
-      height: editorLines.length,
-      width: innerWidth,
-    };
+    this.editorLayout = { ...input.editor, top: this.messageTop + msgLines.length + input.editor.top };
     const lines = renderSideChatFrame({
       width,
       theme,
-      borderColor,
       headerLeft: left,
       headerRight: status,
+      modelDetails,
+      palette: this.palette,
+      compact,
+      minimal,
       msgLines,
-      editorLines,
+      inputLines: input.lines,
       hints: hintLines,
     });
-    this.lastRenderHeight = lines.length;
-    this.geometry = computeChatGeometry(
-      this.options.tui.terminal.columns,
-      width,
-      msgLines.length,
-    );
-    return lines;
+    const frame = lines.slice(0, height);
+    this.lastRenderHeight = frame.length;
+    const viewport = this.getFallbackViewport();
+    this.geometry = {
+      msgTopRow: viewport.topRow + this.messageTop,
+      contentCol: viewport.leftCol + 2,
+      innerWidth,
+      msgHeight: msgLines.length,
+    };
+    return frame;
+  }
+
+  private getFallbackViewport() {
+    const { columns, rows } = this.options.tui.terminal;
+    return {
+      topRow: this.layout === "floating" ? Math.max(0, Math.floor((rows - this.lastRenderHeight) / 2))
+        : this.layout === "compact" ? Math.max(0, Math.min(1, rows - this.lastRenderHeight)) : 0,
+      leftCol: this.layout === "floating" || this.layout === "compact" ? Math.floor((columns - this.lastRenderWidth) / 2)
+        : this.layout === "right" ? columns - this.lastRenderWidth : 0,
+    };
+  }
+
+  private changeLayout(layout: SideChatLayout): void {
+    this.cancelMouseDrag();
+    this.layout = layout;
+    this.geometry = null;
+    this.editorLayout = null;
+    this.options.onLayoutChange?.(layout);
+    this.invalidate();
+    this.options.tui.requestRender();
+  }
+
+  /** A real close destroys the side chat; cancellation leaves any turn running. */
+  requestClose(): void {
+    if (this.disposed) return;
+    this.openDialog(new SideChatDialog(
+      this.options.theme, "Close side chat?",
+      [{ value: "cancel", label: "Keep side chat" }, { value: "close", label: "Close and discard conversation" }],
+      false, 0,
+      (value) => { this.dismissDialog(); if (value === "close") this.dispose(); },
+      () => this.dismissDialog(),
+      this.isStreaming ? "The running response will be stopped. This cannot be undone." : "The side-chat history will be discarded. This cannot be undone.",
+    ));
+  }
+
+  private openDialog(dialog: SideChatDialog | SideChatHelp): void {
+    this.cancelMouseDrag();
+    this.dialog = dialog;
+    this.editor.focused = false;
+    this.options.tui.requestRender();
+  }
+
+  private dismissDialog(): void {
+    this.dialog = null;
+    this.editor.focused = this.focused;
+    this.options.tui.requestRender();
+  }
+
+  private chooseModel(): void {
+    if (this.isStreaming) {
+      this.messages.setToolStatus("Stop the current turn with Alt+S before changing models.");
+      this.options.tui.requestRender();
+      return;
+    }
+    const models = this.options.modelRegistry.getAvailable();
+    const current = this.agent.state.model;
+    this.openDialog(new SideChatDialog(
+      this.options.theme, "Side-chat model (main model is unchanged)",
+      models.map((model, i) => ({ value: String(i), label: `${model.provider}/${model.id}`, description: model.name })),
+      true,
+      models.findIndex((model) => model.id === current?.id && model.provider === current?.provider),
+      (value) => {
+        const model = models[Number(value)];
+        if (!model) return;
+        this.agent.state.model = model;
+        this.agent.state.thinkingLevel = clampThinkingLevel(model, this.agent.state.thinkingLevel);
+        this.options.onSettingsChange?.(model, this.agent.state.thinkingLevel);
+        this.dismissDialog();
+      },
+      () => this.dismissDialog(),
+      models.length ? "Type to filter available models." : "No authenticated models available. Configure a provider in Pi first.",
+    ));
+  }
+
+  private chooseThinking(): void {
+    if (this.isStreaming) {
+      this.messages.setToolStatus("Stop the current turn with Alt+S before changing thinking level.");
+      this.options.tui.requestRender();
+      return;
+    }
+    const model = this.agent.state.model;
+    if (!model) return;
+    const levels = getSupportedThinkingLevels(model);
+    this.openDialog(new SideChatDialog(
+      this.options.theme, "Side-chat thinking level (main is unchanged)",
+      levels.map((level) => ({ value: level, label: level })),
+      false, levels.indexOf(this.agent.state.thinkingLevel),
+      (value) => {
+        this.agent.state.thinkingLevel = value as ThinkingLevel;
+        this.options.onSettingsChange?.(model, this.agent.state.thinkingLevel);
+        this.dismissDialog();
+      },
+      () => this.dismissDialog(),
+      model.reasoning ? "Choose a level supported by the side-chat model." : "This model does not support reasoning; only off is available.",
+    ));
+  }
+
+  private matchesAction(data: string, action: AppKeybinding, fallback: Parameters<typeof matchesKey>[1]): boolean {
+    return this.options.keybindings?.matches?.(data, action) ?? matchesKey(data, fallback);
+  }
+
+  private canChangeSettings(): boolean {
+    if (!this.isStreaming) return true;
+    this.messages.setToolStatus("Stop the current turn with Alt+S before changing model/thinking settings.");
+    this.options.tui.requestRender();
+    return false;
+  }
+
+  private cycleModel(direction: 1 | -1): void {
+    if (!this.canChangeSettings()) return;
+    const available = this.options.modelRegistry.getAvailable();
+    const scoped = this.options.getScopedModels?.() ?? [];
+    const candidates = scoped.length
+      ? scoped.filter(({ model }) => available.some((candidate) => candidate.provider === model.provider && candidate.id === model.id))
+      : available.map((model) => ({ model, thinkingLevel: undefined }));
+    if (candidates.length <= 1) return;
+    const current = this.agent.state.model;
+    const index = Math.max(0, candidates.findIndex(({ model }) => model.provider === current?.provider && model.id === current?.id));
+    const next = candidates[(index + direction + candidates.length) % candidates.length]!;
+    this.agent.state.model = next.model;
+    this.agent.state.thinkingLevel = clampThinkingLevel(next.model, next.thinkingLevel ?? this.agent.state.thinkingLevel);
+    this.options.onSettingsChange?.(next.model, this.agent.state.thinkingLevel);
+    this.options.tui.requestRender();
+  }
+
+  private cycleThinking(): void {
+    if (!this.canChangeSettings()) return;
+    const model = this.agent.state.model;
+    if (!model) return;
+    const levels = getSupportedThinkingLevels(model);
+    const index = levels.indexOf(this.agent.state.thinkingLevel);
+    this.agent.state.thinkingLevel = levels[(index + 1) % levels.length]!;
+    this.options.onSettingsChange?.(model, this.agent.state.thinkingLevel);
+    this.options.tui.requestRender();
   }
 
   handleInput(data: string): void {
-    if (matchesKey(data, Key.escape)) {
-      if (this.isStreaming) {
-        this.agent.abort();
-      } else {
-        this.dispose();
-      }
-      return;
-    }
     if (matchesKey(data, SIDE_CHAT_SHORTCUT)) {
       this.options.onBackground();
       return;
     }
+    // Layout shortcuts work in pickers/help too, without replacing the agent.
+    if (matchesKey(data, Key.ctrlAlt("left"))) { this.changeLayout("fullscreen"); return; }
+    if (matchesKey(data, Key.ctrlAlt("up"))) { this.changeLayout("compact"); return; }
+    if (matchesKey(data, Key.ctrlAlt("right"))) { this.changeLayout("right"); return; }
+    if (matchesKey(data, Key.ctrlAlt("down"))) { this.changeLayout("floating"); return; }
+    // Stopping a turn must remain available inside help/close confirmation too.
+    if (matchesKey(data, Key.alt("s"))) { this.agent.abort(); return; }
+    if (this.dialog) {
+      this.dialog.handleInput(data);
+      this.options.tui.requestRender();
+      return;
+    }
+    if (matchesKey(data, Key.escape)) { this.requestClose(); return; }
+    // Only an empty draft treats ? as navigation; normal questions and pasted text stay editable.
+    if (data === "?" && !this.editor.getText()) {
+      this.openDialog(new SideChatHelp(() => this.dismissDialog(), this.options.keybindings));
+      return;
+    }
+    if (this.matchesAction(data, "app.model.cycleForward", Key.ctrl("p"))) { this.cycleModel(1); return; }
+    if (this.matchesAction(data, "app.model.cycleBackward", Key.ctrlShift("p")) || matchesKey(data, Key.alt("p"))) { this.cycleModel(-1); return; }
+    if (this.matchesAction(data, "app.thinking.cycle", Key.shift("tab"))) { this.cycleThinking(); return; }
+    if (matchesKey(data, Key.alt("m"))) { this.chooseModel(); return; }
+    if (matchesKey(data, Key.alt("t"))) { this.chooseThinking(); return; }
     if (matchesKey(data, Key.alt("r"))) {
       this.dispose("refork");
       return;
@@ -959,6 +1144,15 @@ export class SideChatOverlay implements Component, Focusable {
       this.options.tui.requestRender();
       return;
     }
+    const tuiBindings = getKeybindings();
+    if (tuiBindings.matches(data, "tui.altScreen.previousPrompt") ||
+        tuiBindings.matches(data, "tui.altScreen.nextPrompt")) {
+      const direction = tuiBindings.matches(data, "tui.altScreen.previousPrompt") ? -1 : 1;
+      this.cancelMouseDrag();
+      this.messages.jumpToMessage(direction);
+      this.options.tui.requestRender();
+      return;
+    }
     if (this.messages.handleInput(data)) {
       this.options.tui.requestRender();
       return;
@@ -978,7 +1172,7 @@ export class SideChatOverlay implements Component, Focusable {
         messages: [...this.agent.state.messages],
         streamingContent: this.streamingContent,
         cwd: this.options.forkContext.cwd,
-        modelId: this.options.forkContext.model.id,
+        modelId: this.agent.state.model?.id ?? this.options.forkContext.model.id,
         toolMode: this.toolMode,
         forkedMessageCount: this.forkedMessageCount,
         streaming: this.isStreaming,
@@ -998,6 +1192,9 @@ export class SideChatOverlay implements Component, Focusable {
   dispose(action: "close" | "refork" | "clear" = "close") {
     if (this.disposed) return;
     this.disposed = true;
+    this.unsubscribeColorScheme?.();
+    this.unsubscribeColorScheme = undefined;
+    this.dialog = null;
     this.stopSpinner();
     if (this.copyClearTimer) {
       clearTimeout(this.copyClearTimer);
@@ -1014,124 +1211,71 @@ export class SideChatOverlay implements Component, Focusable {
   }
 }
 
-function parsePercent(value: string, reference: number): number {
-  const match = /^(\d+(?:\.\d+)?)%$/.exec(value);
-  if (!match) return reference;
-  return Math.floor((reference * parseFloat(match[1])) / 100);
-}
-
 /**
- * Screen geometry of the chat message area, mirroring the overlay layout
- * pi-tui computes from the side chat's overlayOptions (width 85%, anchor
- * top-center, margin { top: 1, left: 2, right: 2 }); see resolveOverlayLayout.
- * The overlay top row is pinned to marginTop, the message area starts after
- * the top border, header and separator (3 lines), and content cells begin
- * after the left border + padding (2 cells).
- */
-function computeChatGeometry(
-  termCols: number,
-  width: number,
-  msgHeight: number,
-): ChatGeometry {
-  const availWidth = Math.max(
-    1,
-    termCols - SIDE_CHAT_OVERLAY_MARGIN_LEFT - SIDE_CHAT_OVERLAY_MARGIN_RIGHT,
-  );
-  const leftCol =
-    SIDE_CHAT_OVERLAY_MARGIN_LEFT + Math.floor((availWidth - width) / 2);
-  return {
-    msgTopRow: SIDE_CHAT_OVERLAY_MARGIN_TOP + 3,
-    contentCol: leftCol + 2,
-    innerWidth: width - 4,
-    msgHeight,
-  };
-}
-
-/**
- * Pure side chat frame renderer: borders, header, messages, editor, hints.
+ * Pure, borderless panel renderer: header, messages, editor and hints.
  * Kept separate so previews/tests can render the exact same frame without a TUI.
  */
 export interface SideChatFrameOptions {
   width: number;
   theme: Theme;
-  borderColor: ThemeColor;
   headerLeft: string;
   headerRight: string;
+  modelDetails?: string;
+  palette?: PanelPalette;
+  compact?: boolean;
+  minimal?: boolean;
   msgLines: string[];
-  editorLines: string[];
+  inputLines: string[];
   hints: string[];
 }
 
 export function renderSideChatFrame(opts: SideChatFrameOptions): string[] {
-  const { theme, width, borderColor } = opts;
+  const { theme, width } = opts;
   const innerWidth = width - 4;
   const lines: string[] = [];
 
-  const headerLeftWidth = Math.max(
-    1,
-    innerWidth - visibleWidth(opts.headerRight) - 1,
-  );
-  const headerLeft = truncateToWidth(opts.headerLeft, headerLeftWidth);
-  const headerGap = " ".repeat(
-    Math.max(
-      1,
-      innerWidth - visibleWidth(headerLeft) - visibleWidth(opts.headerRight),
-    ),
-  );
+  // Reserve title + a useful model preview before spending space on status.
+  const leftText = opts.headerLeft + (opts.modelDetails ? `  ${opts.modelDetails}` : "");
+  const minLeft = Math.min(innerWidth, visibleWidth(opts.headerLeft) + (opts.modelDetails ? 18 : 0));
+  const headerRight = truncateToWidth(opts.headerRight, Math.max(0, innerWidth - minLeft - 2));
+  const headerLeft = truncateToWidth(leftText, Math.max(0, innerWidth - visibleWidth(headerRight) - 2));
+  const headerGap = " ".repeat(Math.max(0, innerWidth - visibleWidth(headerLeft) - visibleWidth(headerRight)));
 
-  lines.push(theme.fg(borderColor, "┌" + "─".repeat(width - 2) + "┐"));
-  lines.push(
-    frameLine(
-      theme,
-      borderColor,
-      `${headerLeft}${headerGap}${opts.headerRight}`,
-      innerWidth,
-    ),
-  );
-  lines.push(theme.fg(borderColor, "├" + "─".repeat(width - 2) + "┤"));
-  for (const line of opts.msgLines)
-    lines.push(frameLine(theme, borderColor, line, innerWidth));
-  lines.push(theme.fg(borderColor, "├" + "─".repeat(width - 2) + "┤"));
-  for (const line of opts.editorLines)
-    lines.push(frameLine(theme, borderColor, line, innerWidth));
-  lines.push(theme.fg(borderColor, "├" + "─".repeat(width - 2) + "┤"));
-  for (const line of opts.hints)
-    lines.push(
-      frameLine(theme, borderColor, theme.fg("dim", line), innerWidth),
-    );
-  lines.push(theme.fg(borderColor, "└" + "─".repeat(width - 2) + "┘"));
+  const row = (surface: "body" | "header" | "input", text = "") =>
+    paintPanel(theme, surface, `  ${truncateToWidth(text, Math.max(0, innerWidth), "…", true)}  `, width, opts.palette);
+  if (!opts.minimal) {
+    if (!opts.compact) lines.push(row("header"));
+    lines.push(row("header", `${headerLeft}${headerGap}${headerRight}`));
+    if (!opts.compact) lines.push(row("header"));
+    lines.push(row("body"));
+  }
+  // Message rows already own their background. Paint only the frame margins;
+  // a second body wrapper would steal user-card colors after ANSI resets.
+  const margin = paintPanel(theme, "body", "", 2, opts.palette);
+  for (const line of opts.msgLines) lines.push(margin + (line || paintPanel(theme, "body", "", Math.max(0, innerWidth), opts.palette)) + margin);
+  lines.push(...opts.inputLines);
+  for (const line of opts.hints) lines.push(row("header", line));
+  if (!opts.compact) lines.push(row("header"));
 
   return lines.map((l) =>
     visibleWidth(l) > width ? truncateToWidth(l, width) : l,
   );
 }
 
-function frameLine(
-  theme: Theme,
-  borderColor: ThemeColor,
-  line: string,
-  width: number,
-): string {
-  return (
-    theme.fg(borderColor, "│ ") +
-    truncateToWidth(line, width, "...", true) +
-    theme.fg(borderColor, " │")
-  );
-}
-
-/**
- * Build the fixed two-row key-hint bar. Row 1: scrolling, copy, mode toggle,
- * Esc and send; row 2: the Alt-actions (Alt abbreviated as A, A+w = Alt+W).
- * Always two rows — the rows are truncated on narrow terminals rather than
- * collapsing to one line, keeping the message-area height stable.
- */
-export function buildSideChatHintLines(options: {
-  scrollHint: string;
-  escHint: string;
-  modeHint: string;
-}): string[] {
-  const { scrollHint, escHint, modeHint } = options;
-  const primary = `${scrollHint} · C+c copy · ${modeHint} · ${escHint} · Enter send`;
-  const secondary = `A+w bg · A+r fork · A+n new · A+e export`;
-  return [primary, secondary];
+/** One quiet row outside the input card; drop secondary actions before clipping keys. */
+export function buildSideChatHintLines(width: number, bindings?: ShortcutBindings, theme?: Theme): string[] {
+  const modelKey = actionShortcutLabel(bindings, "app.model.cycleForward", "Ctrl+P");
+  const thinkingKey = actionShortcutLabel(bindings, "app.thinking.cycle", "Shift+Tab");
+  const primary = [shortcutHint("Enter", "send", theme), shortcutHint("Esc", "close", theme), shortcutHint("?", "keys", theme)].join(" · ");
+  const secondary = [shortcutHint("Alt+W", "hide", theme), shortcutHint(modelKey, "model", theme), shortcutHint(thinkingKey, "think", theme)];
+  const candidates = [
+    [primary, ...secondary].join(" · "),
+    [primary, ...secondary.slice(0, 2)].join(" · "),
+    [primary, secondary[0]].join(" · "),
+    primary,
+    [shortcutHint("Enter", "send", theme), shortcutHint("?", "keys", theme)].join(" · "),
+    shortcutHint("?", "keys", theme),
+  ];
+  const line = candidates.find((candidate) => visibleWidth(candidate) <= width);
+  return line ? [line] : [];
 }

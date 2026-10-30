@@ -15,11 +15,11 @@ import { loadConfig } from "./config.ts";
 import { getExtensionDir, loadPromptPack } from "./prompt-pack.ts";
 import {
   SideChatOverlay,
-  SIDE_CHAT_OVERLAY_MARGIN_TOP,
-  SIDE_CHAT_OVERLAY_MAX_HEIGHT,
   type ForkContext,
 } from "./side-chat-overlay.ts";
 import { SIDE_CHAT_SHORTCUT } from "./shortcuts.ts";
+import { sideChatOverlayOptions } from "./side-chat-layout.ts";
+import { SideChatStatusIndicator } from "./side-chat-status.ts";
 import {
   disableMouseReporting,
   enableMouseReporting,
@@ -50,7 +50,8 @@ export default function sideChatExtension(pi: ExtensionAPI) {
   const tracker = new FileActivityTracker();
   let activeOverlay: SideChatOverlay | null = null;
   let overlayHandle: OverlayHandle | null = null;
-  let lastMessages: AgentMessage[] | null = null;
+  const indicator = new SideChatStatusIndicator();
+  let sideSettings: Pick<ForkContext, "model" | "thinkingLevel"> | null = null;
   let mouseTerminal: Terminal | null = null;
   let removeMouseListener: (() => void) | null = null;
 
@@ -197,17 +198,23 @@ export default function sideChatExtension(pi: ExtensionAPI) {
       notify: (message) => ctx.ui.notify(message, "warning"),
     });
     const forkContext: ForkContext = {
-      messages: clear ? [] : (lastMessages ?? sessionContext.messages),
-      model: ctx.model,
+      messages: clear ? [] : sessionContext.messages,
+      model: sideSettings?.model ?? ctx.model,
       systemPrompt: ctx.getSystemPrompt(),
-      thinkingLevel: pi.getThinkingLevel(),
+      thinkingLevel: sideSettings?.thinkingLevel ?? pi.getThinkingLevel(),
       cwd: ctx.cwd,
       extensionTools: getExtensionAgentTools(),
     };
+    // Copy once: later main-session model/thinking changes never affect the side agent.
+    sideSettings = { model: forkContext.model, thinkingLevel: forkContext.thinkingLevel };
 
+    // Pi 1.4 retains this options object by reference and resolves it each
+    // frame. Its handle has no update API; mutating this one object lets us
+    // reposition the existing component without losing its agent or draft.
+    const overlayOptions = sideChatOverlayOptions("floating");
     try {
       const action = await ctx.ui.custom<"close" | "refork" | "clear">(
-        (tui, theme, _keybindings, done) => {
+        (tui, theme, keybindings, done) => {
           if (tui.hasOverlay()) {
             setTimeout(() => {
               ctx.ui.notify(
@@ -224,10 +231,16 @@ export default function sideChatExtension(pi: ExtensionAPI) {
             forkContext,
             tracker,
             modelRegistry: ctx.modelRegistry,
+            getScopedModels: () => ctx.scopedModels ?? [],
+            keybindings,
+            getBounds: () => overlayHandle?.getBounds(),
+            onLayoutChange: (layout) => { Object.assign(overlayOptions, sideChatOverlayOptions(layout)); },
             sessionManager: ctx.sessionManager,
             promptPack,
             readOnlyExtensionAllowlist: config.readOnlyExtensionAllowlist,
             onOverlapWarning: (path) => showOverlapWarning(ctx.ui, path),
+            onBusyChange: (busy) => indicator.update(ctx.ui, busy ? "busy" : "idle"),
+            onSettingsChange: (model, thinkingLevel) => { sideSettings = { model, thinkingLevel }; },
             onBackground: () => {
               overlayHandle?.unfocus();
               overlayHandle?.setHidden(true);
@@ -235,8 +248,8 @@ export default function sideChatExtension(pi: ExtensionAPI) {
             },
             onExport: (path) =>
               ctx.ui.notify(`btw chat exported → ${path}`, "info"),
-            onClose: (action, messages) => {
-              lastMessages = action === "close" ? messages : null;
+            onClose: (action) => {
+              indicator.update(ctx.ui, null);
               activeOverlay = null;
               overlayHandle = null;
               uninstallMouseHandler();
@@ -244,17 +257,12 @@ export default function sideChatExtension(pi: ExtensionAPI) {
             },
           });
           installMouseHandler(tui);
+          indicator.update(ctx.ui, "idle");
           return activeOverlay;
         },
         {
           overlay: true,
-          overlayOptions: {
-            width: "85%",
-            maxHeight: SIDE_CHAT_OVERLAY_MAX_HEIGHT,
-            anchor: "top-center",
-            margin: { top: SIDE_CHAT_OVERLAY_MARGIN_TOP, left: 2, right: 2 },
-            nonCapturing: true,
-          },
+          overlayOptions,
           onHandle: (handle) => {
             overlayHandle = handle;
             handle.focus();
@@ -269,6 +277,7 @@ export default function sideChatExtension(pi: ExtensionAPI) {
       }
       activeOverlay = null;
       overlayHandle = null;
+      indicator.update(ctx.ui, null);
       uninstallMouseHandler();
       throw error;
     }
@@ -277,6 +286,25 @@ export default function sideChatExtension(pi: ExtensionAPI) {
   pi.registerShortcut(SIDE_CHAT_SHORTCUT, {
     description: "Open / background / restore the side chat (keeps it running)",
     handler: backgroundSideChat,
+  });
+
+  const requestClose = async () => {
+    if (!activeOverlay) return;
+    overlayHandle?.setHidden(false);
+    overlayHandle?.focus();
+    syncMouseReporting();
+    activeOverlay.requestClose();
+  };
+  pi.registerCommand("btw-close", {
+    description: "Close side chat (with confirmation)",
+    handler: requestClose,
+  });
+  // Session changes are lifecycle teardown, not a user close request.
+  pi.on("session_start", () => { activeOverlay?.dispose(); sideSettings = null; });
+  pi.on("session_shutdown", () => {
+    activeOverlay?.dispose();
+    uninstallMouseHandler();
+    indicator.dispose();
   });
 
   pi.registerCommand("side", {

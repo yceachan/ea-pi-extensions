@@ -17,6 +17,8 @@
 [![npm version](https://img.shields.io/npm/v/@yceachan/pi-better-btw?style=for-the-badge)](https://www.npmjs.com/package/@yceachan/pi-better-btw)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
 
+需要 Pi 1.4 或更新版本。
+
 ```bash
 pi install npm:@yceachan/pi-better-btw
 #in pi tui
@@ -25,7 +27,7 @@ pi install npm:@yceachan/pi-better-btw
 
 你在处理一个较长任务时，想顺便问点小事又不想打断主线——查一个 API 细节、验证一个思路、搜点东西，或者看看主线 agent 在干什么。打开BTW Tui OverLay，提问，关闭。主线线程完全不受打扰。
 
-<img src="https://ali-oss-yceachan.oss-cn-chengdu.aliyuncs.com/img-bed-typora/image-20260817171045290.png" alt="image-20260817171045290" style="zoom:33%;" />
+<img src="preview.jpg" alt="pi-better-btw 旁路聊天预览" width="1100" />
 
 ## Feat
 
@@ -56,7 +58,13 @@ pi install npm:@yceachan/pi-better-btw
 
 用 `/btw`（别名 `/side`）或 `Alt+W`（同时负责后台/显示切换）打开旁路会话。提问后按 `Enter`。
 
-按 `Esc` 关闭。用 `/btw` 或 `Alt+W` 重新打开，会话继续保留。
+`Esc` 请求确认关闭，默认选中保留。确认后停止生成并丢弃旁路会话；在选择器、确认卡片或帮助页中按 `Esc` 则返回聊天。`Alt+W` 隐藏或恢复浮层，不停止生成，保留历史、草稿和滚动位置。主编辑器中的 `/btw-close` 同样请求确认关闭。
+
+主界面默认页脚在模型旁显示 `[● side chat]`：生成中为黄色，空闲时为绿色，隐藏期间仍可见，关闭后消失。不接管自定义页脚，而是提供标准 keyed status 供其显示。
+
+旁路模型和思考级别最初继承主会话，之后独立选择，并在当前 Pi 进程中记忆。`Ctrl+P` / `Ctrl+Shift+P` 按 Pi 范围循环模型，`Shift+Tab` 循环支持的思考级别，`Alt+P` 可替代反向模型切换。这些操作遵循 Pi 的按键配置。`Alt+M` 打开可搜索模型列表，`Alt+T` 打开思考级别选择。切换前用 `Alt+S` 停止当前生成，不会修改主会话设置。
+
+无边框面板跟随主主题及终端颜色，与主背景保持轻微层次差异。用户消息有带留白和左侧细竖线的卡片，复制时不包含装饰线；AI 回复复用 Pi 原生 Markdown、代码及思考内容渲染，不单独分色。内收输入框从三行按需增长，最多显示五行正文并保持光标可见；`›` 和“问点什么…”仅作显示，不进入草稿。常用提示在空间允许时压缩为一行；空草稿按 `?` 查看完整自适应快捷键页。
 
 | 快捷键 | 作用 |
 | ------ | ---- |
@@ -75,13 +83,15 @@ What is the main agent doing right now?
 What changed since I opened this side chat?
 ```
 
-**非抢占浮层 + 后台化** —— 浮层在屏幕顶部打开，主编辑器保持可见。浮层打开期间始终聚焦；`Alt+W` 将其后台化（隐藏，agent 继续流式输出）交还键盘，再按 `Alt+W` 恢复显示。
+**后台化** —— 默认浮层居中，占终端 90% 宽、最多 92% 高。`Alt+W` 隐藏浮层并交还主线键盘，agent 继续流式输出，再按 `Alt+W` 恢复。
 
-**更高的聊天区域** —— 消息区比上游高约 2.5 倍，长回答和工具输出更易读；在小终端上自适应（不溢出，始终保留主编辑器可见）。
+**实时布局** —— `Ctrl+Alt+←` 全屏，`Ctrl+Alt+↑` 原始较小顶部居中窗口（85% 宽），`Ctrl+Alt+↓` 较大居中浮窗，`Ctrl+Alt+→` 全高右半屏。在选择器和帮助页中也可切换。保留 agent、历史和草稿；由于折行变化，仅清除当前文本选区。布局随终端缩放，并为多行编辑器保留实际高度。
 
-**滚动历史** —— `PgUp`/`PgDn` 整页滚动，`Shift+↑`/`Shift+↓` 按行滚动，鼠标指针悬停于聊天区域时滚轮滚动。离开最新消息时，标题栏出现 `[↑N]` 指示器，提示栏切换为 `↑N · PgDn/Wheel ↓`。流式期间视口跟随底部；一旦你向上滚动就冻结内容锚定（新行增长滚动偏移而不是滑动可见内容），回到底部或新消息后恢复跟随。
+**消息跳转** —— `Ctrl+↑`/`Ctrl+↓` 跳转到用户提问或最终 AI 回复，跳过工具记录，并遵循 Pi 的 `tui.altScreen.previousPrompt`/`nextPrompt` 自定义绑定。流式 AI 文本同样参与跳转，不改变草稿和运行中的 agent。
 
-**鼠标选择 + 快捷键复制** —— 拖拽选择聊天文本（反色高亮）；双击选择整行。复制仅限快捷键：`Ctrl+C` / `Ctrl+Shift+C` 通过原生剪贴板级联（`wl-copy`/`xclip`，OSC 52 兜底）复制保留的选择；选择保持高亮，可重复按复制。拖拽不碰剪贴板，鼠标交互不阻塞事件循环。Pi 1.0 全屏模式下，浮层使用 Pi 的标准鼠标分发与拖拽捕获接口；点击输入区可定位光标。后台化或关闭浮层后，Pi 主界面的鼠标操作保持可用。常规模式下，扩展自管的鼠标上报跟随浮层*可见性*，后台化时恢复终端原生选择。
+**滚动历史** —— `PgUp`/`PgDn` 整页滚动，`Shift+↑`/`Shift+↓` 按行滚动，鼠标指针悬停于聊天区域时滚轮滚动。离开最新消息时，标题栏出现 `[↑N]` 指示器。流式期间视口跟随底部；一旦你向上滚动就冻结内容锚定（新行增长滚动偏移而不是滑动可见内容），回到底部或新消息后恢复跟随。
+
+**鼠标选择 + 快捷键复制** —— 拖拽选择聊天文本（反色高亮）；双击选择整行。复制仅限快捷键：`Ctrl+C` / `Ctrl+Shift+C` 通过原生剪贴板级联（`wl-copy`/`xclip`，OSC 52 兜底）复制保留的选择；选择保持高亮，可重复按复制。拖拽不碰剪贴板，鼠标交互不阻塞事件循环。Pi 全屏模式下，浮层使用 Pi 的标准鼠标分发与拖拽捕获接口；点击输入区可定位光标。后台化或关闭浮层后，Pi 主界面的鼠标操作保持可用。常规模式下，扩展自管的鼠标上报跟随浮层*可见性*，后台化时恢复终端原生选择。
 
 **对话导出** —— `Alt+E` 把 btw 历史（fork 上下文、framing 块、对话、流式中内容）导出为 `$CWD/.agents/eval/pi-better-btw-<timestamp>.md` 的 markdown 诊断产物，便于调试功能开发。
 
@@ -91,7 +101,15 @@ What changed since I opened this side chat?
 | ---- | ---- |
 | `Alt+W` | 打开（关闭时）/ 后台化（显示时）/ 恢复（隐藏时） |
 | `Enter` | 发送消息 |
-| `Esc` | 中断流式输出；空闲时关闭 |
+| `Esc` | 请求确认关闭；从选择器、确认卡片或帮助页返回聊天 |
+| `?` | 完整快捷键页（仅空草稿） |
+| `Ctrl+Alt+←` / `↑` / `↓` / `→` | 全屏 / 小浮窗 / 大浮窗 / 右半屏 |
+| `Ctrl+↑` / `Ctrl+↓` | 上一条 / 下一条消息（Pi 绑定） |
+| `Ctrl+P` / `Ctrl+Shift+P` | 向前 / 向后循环旁路模型（Pi 绑定） |
+| `Alt+P` | 向后循环模型（替代按键） |
+| `Shift+Tab` | 循环支持的思考级别（Pi 绑定） |
+| `Alt+M` / `Alt+T` | 搜索模型 / 选择思考级别 |
+| `Alt+S` | 停止当前生成，保留会话 |
 | `Alt+R` | 从最新主线上下文重新 fork |
 | `Alt+N` | 开始空白对话 |
 | `Alt+E` | 导出 btw 对话历史到 `$CWD/.agents/eval/pi-better-btw-<timestamp>.md` |
@@ -112,6 +130,10 @@ What changed since I opened this side chat?
 ### `/side`
 
 打开旁路会话浮层（保留上游命令名作为兼容别名）。
+
+### `/btw-close`
+
+请求确认关闭，先恢复隐藏的会话。无活动旁路会话时不操作。
 
 ### `peek_main`
 
@@ -164,13 +186,17 @@ pi-better-btw 从三个位置按优先级递增读取 `config.json` —— 每�
 
 ## 工作原理
 
-扩展克隆当前会话上下文，创建带全部扩展工具的独立 agent 实例，并在 TUI 浮层中渲染。关闭时在内存中保存对话，重开恢复。后台化（`Alt+W`）通过 TUI 的 overlay handle 隐藏浮层，agent 继续运行。
+扩展克隆当前会话上下文，创建带全部扩展工具的独立 agent 实例，并在 TUI 浮层中渲染。隐藏（`Alt+W`）保留 agent、草稿及流式输出；确认关闭会销毁旁路会话，下次打开重新 fork 主线上下文。
+
+默认页脚指示器适配公开的 `FooterComponent` 渲染器，不修改已安装的 Pi 文件，也不接管 `setFooter`；扩展退出时恢复渲染器。标准 keyed `setStatus` 在运行中切换自定义页脚时仍然可用。模型行位置依赖 Pi 页脚内部布局，使用真实渲染器回归测试覆盖。
+
+旁路请求走 `modelRegistry.streamSimple`，由 Pi 模型运行时处理认证、请求头和虚拟模型路由。
 
 btw 上下文保留主线的 system prompt 于 system 槽位，并逐字注入 fork 快照，使 btw 请求头成为主线请求的 token 前缀（网关前缀缓存命中）。`forkSurgery`（`srcs/fork-surgery.ts`）让快照的尾部工具交换对网关合法；提示包供给全部注入文本；车道强制在只读模式下包装 `beforeToolCall`/`afterToolCall`（`srcs/side-chat-overlay.ts`）。
 
 主线 agent 的工具执行事件被跟踪以维护已写文件路径集合（`srcs/file-activity-tracker.ts`）；写类工具被包装以在触碰这些路径前警告（`srcs/tool-wrapper.ts`）。
 
-全屏模式（Pi 1.0 默认）下，`SideChatOverlay.handleMouse()` 接收 Pi 分发的组件局部坐标事件，处理滚轮、捕获聊天区的选择拖拽，并把输入区点击转交给编辑器定位光标。复制仍只由快捷键触发，终端鼠标上报始终归 Pi 管理。常规模式保留原始 SGR 监听器：仅在浮层可见时启用上报，并在鼠标序列进入编辑器前消费它们。
+Pi 全屏模式下，`SideChatOverlay.handleMouse()` 接收 Pi 分发的组件局部坐标事件，处理滚轮、捕获聊天区的选择拖拽，并把输入区点击转交给编辑器定位光标。复制仍只由快捷键触发，终端鼠标上报始终归 Pi 管理。常规模式保留原始 SGR 监听器：仅在浮层可见时启用上报，并在鼠标序列进入编辑器前消费它们。
 
 `peek_main` 按需读取当前会话分支并返回紧凑摘要。
 
@@ -187,6 +213,12 @@ btw 上下文保留主线的 system prompt 于 system 槽位，并逐字注入 f
 │   ├── fork-surgery.ts    # 共享前缀 fork 快照手术（网关合法尾部）
 │   ├── side-chat-overlay.ts  # TUI 浮层、agent 生命周期、车道强制、鼠标路由
 │   ├── side-chat-messages.ts # 消息渲染、换行、选择、滚动
+│   ├── side-chat-status.ts   # 主界面页脚指示器与 keyed status 兜底
+│   ├── side-chat-dialog.ts   # 模型、思考级别、关闭确认卡片
+│   ├── side-chat-help.ts     # 自适应提示与快捷键页
+│   ├── side-chat-input.ts    # 输入卡片、光标与鼠标坐标映射
+│   ├── side-chat-panel.ts    # 主主题及终端衍生配色
+│   ├── side-chat-layout.ts   # 实时布局预设
 │   ├── side-chat-mouse.ts    # 最小 SGR 鼠标解析
 │   ├── side-chat-export.ts   # Alt+E 对话导出
 │   ├── tool-wrapper.ts       # 写路径重叠警告
@@ -195,6 +227,7 @@ btw 上下文保留主线的 system prompt 于 system 槽位，并逐字注入 f
 ├── test/                  # bun test 测试套件（配置解析、鼠标选择）
 ├── config.json            # 内置默认（promptPack 清单 + 只读白名单）
 ├── banner.png
+├── preview.jpg
 └── README.md
 ```
 
@@ -203,7 +236,7 @@ btw 上下文保留主线的 system prompt 于 system 槽位，并逐字注入 f
 ```bash
 bun install         # 安装依赖
 bun run typecheck   # tsc --noEmit -p tsconfig.json
-bun test            # bun test test/（串行运行，见 bunfig.toml）
+bun run test        # 已注册的自动化测试（串行运行，见 bunfig.toml）
 ```
 
 发布包包含 `srcs/`、`prompts/`、`config.json` 与文档；测试不进入 tarball。开发时把 pi 的扩展加载器指向 `./srcs/index.ts`，改完代码 `/reload` 即可（无构建步骤——pi 直接加载 TypeScript）。
@@ -215,7 +248,7 @@ bun test            # bun test test/（串行运行，见 bunfig.toml）
 - 不会把消息合并回主线会话
 - bash 重叠检测是启发式的——覆盖常见写模式，非全部
 - `peek_main` 是按需读取，非实时
-- 全屏鼠标支持使用 Pi 1.0 的组件鼠标 API；常规模式继续使用 SGR 兼容路径
+- 需要 Pi 1.4+；全屏鼠标使用 Pi 组件鼠标 API，常规模式保留 SGR 兼容路径
 
 ## License
 
