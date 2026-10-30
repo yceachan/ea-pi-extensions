@@ -58,11 +58,11 @@ You're in the middle of a longer task and want to ask something small without de
 
 Open the side chat with `/btw` (alias `/side`) or `Alt+W` (which also toggles background/display). Ask a question and press `Enter`.
 
-While a response is running, `Esc` stops the current turn and leaves the chat open. Once idle, `Esc` hides the overlay, retaining the session, history, draft and scroll position. Inside a model/thinking picker or help page, `Esc` first returns to the chat. `Alt+W` hides/restores even while generation continues. Only `Alt+N` discards the current side-chat session and starts an empty one; `/btw-close` and `Alt+R` are no longer available.
+While a response is running, `Esc` stops the current turn and leaves the chat open. Once idle, `Esc` hides the overlay, retaining the session, history, draft and scroll position. Inside the help page, `Esc` first returns to the chat. `Alt+W` hides/restores even while generation continues. Only `Alt+N` discards the current side-chat session and starts an empty one; `/btw-close` and `Alt+R` are no longer available.
 
 The default main footer shows `[● side chat]` beside its model: yellow while generating, green when idle, including while hidden. It disappears on close. Custom footers are not replaced; they receive a standard keyed status fallback.
 
-The side chat has its own model and thinking level, initially inherited from the main session but independently remembered for the current Pi process. `Ctrl+P` / `Ctrl+Shift+P` cycle scoped models, `Shift+Tab` cycles supported thinking levels, and `Alt+P` is an alternative backward-model key. These actions follow Pi's configured bindings. `Alt+M` opens searchable model selection; `Alt+T` opens thinking selection. Stop a running turn with `Alt+S` before switching. Main-session settings are never changed.
+Each side-chat session inherits the main session's model and thinking level at creation and keeps them fixed for its lifetime, avoiding cache misses caused by switching these settings. Hiding and restoring preserves that snapshot; `Alt+N` starts an empty session with the main session's current settings.
 
 The borderless panel follows the main theme and terminal colors, subtly separated from the main background. User messages have padded cards with a thin left rail; the rail is decorative and is not copied. AI replies use Pi's native Markdown/code/thinking renderer without a separate message background; thinking and tool details follow the [quiet display switch](#btw-quiet). The inset editor grows from three rows to at most five content rows, keeping its cursor visible. Its `›` marker and “问点什么…” placeholder are presentation only. Common hints fit on one row when space permits; type `?` on an empty draft for the full responsive shortcut page.
 
@@ -84,7 +84,7 @@ What changed since I opened this side chat?
 
 **Backgrounding** — the default overlay is centered at 90% terminal width and up to 92% height. `Alt+W` hides it while the agent keeps streaming, handing the keyboard back to the main session; `Alt+W` restores it.
 
-**Live layouts** — `Ctrl+Alt+←` fills the terminal, `Ctrl+Alt+↑` selects the original smaller top-center window (85% width), `Ctrl+Alt+↓` restores the larger centered floating window, and `Ctrl+Alt+→` uses the right half at full height. These keys also work inside pickers/help. Switching preserves the agent, history and draft; only the active text selection is cleared because wrapping changes. Layouts adapt to terminal resizing and reserve the actual multiline editor height.
+**Live layouts** — `Ctrl+Alt+←` fills the terminal, `Ctrl+Alt+↑` selects the original smaller top-center window (85% width), `Ctrl+Alt+↓` restores the larger centered floating window, and `Ctrl+Alt+→` uses the right half at full height. These keys also work inside help. Switching preserves the agent, history and draft; only the active text selection is cleared because wrapping changes. Layouts adapt to terminal resizing and reserve the actual multiline editor height.
 
 **Message navigation** — `Ctrl+↑`/`Ctrl+↓` jump between user prompts and final AI responses, skipping tools and following Pi's `tui.altScreen.previousPrompt`/`nextPrompt` remaps. Streaming AI text is included; the draft and running agent are preserved.
 
@@ -100,14 +100,10 @@ What changed since I opened this side chat?
 | ---- | ---- |
 | `Alt+W` | Open (when closed) / background (when visible) / restore (when hidden) |
 | `Enter` | Send message |
-| `Esc` | Stop the running turn; hide when idle; return from pickers/help |
+| `Esc` | Stop the running turn; hide when idle; return from help |
 | `?` | Full shortcut page (empty draft only) |
 | `Ctrl+Alt+←` / `↑` / `↓` / `→` | Fullscreen / smaller floating / larger floating / right-half layout |
 | `Ctrl+↑` / `Ctrl+↓` | Previous / next message (Pi bindings) |
-| `Ctrl+P` / `Ctrl+Shift+P` | Cycle side-chat model forward / backward (Pi bindings) |
-| `Alt+P` | Cycle model backward (alternative key) |
-| `Shift+Tab` | Cycle supported thinking levels (Pi binding) |
-| `Alt+M` / `Alt+T` | Search models / pick thinking level |
 | `Alt+S` | Stop the current turn, keeping the chat |
 | `Alt+N` | Discard the session and start an empty conversation |
 | `Alt+E` | Export the btw chat history to `$CWD/.agents/eval/pi-better-btw-<timestamp>.md` |
@@ -186,7 +182,7 @@ The bundled `config.json` ships the official pi tool set in the read-only allowl
 
 ## How It Works
 
-The extension clones the current session context, creates a separate agent instance with the current mode's tool set, and renders it in a TUI overlay. Opening commands return as soon as the overlay is mounted, so the main input loop can continue dispatching commands while the chat is visible or hidden. The UI interaction runs independently until session teardown or `Alt+N`. Hiding preserves the agent and draft; `Alt+W` also keeps a running response active. `Alt+N` aborts the old session and opens an empty one with the remembered side-chat model and thinking settings.
+The extension clones the current session context, creates a separate agent instance with the current mode's tool set, and renders it in a TUI overlay. Opening commands return as soon as the overlay is mounted, so the main input loop can continue dispatching commands while the chat is visible or hidden. The UI interaction runs independently until session teardown or `Alt+N`. Hiding preserves the agent and draft; `Alt+W` also keeps a running response active. `Alt+N` aborts the old session and opens an empty one.
 
 The default-footer badge adapts the exported `FooterComponent` renderer without editing installed Pi files or taking over `setFooter`. It restores the renderer on shutdown. A keyed `setStatus` remains available when custom footers are switched at runtime. Model-row placement depends on Pi footer internals, covered by a real-renderer regression test.
 
@@ -214,7 +210,6 @@ Structure:
 │   ├── side-chat-overlay.ts  # TUI overlay, agent lifecycle, lane enforcement, mouse routing
 │   ├── side-chat-messages.ts # message rendering, wrapping, selection, scrolling
 │   ├── side-chat-status.ts   # main-footer indicator and keyed fallback
-│   ├── side-chat-dialog.ts   # model/thinking selection cards
 │   ├── side-chat-help.ts     # responsive hints and shortcut page
 │   ├── side-chat-input.ts    # input card, cursor and mouse-coordinate mapping
 │   ├── side-chat-panel.ts    # theme/terminal-derived surfaces

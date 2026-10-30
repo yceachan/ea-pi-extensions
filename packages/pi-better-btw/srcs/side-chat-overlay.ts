@@ -6,7 +6,6 @@ import {
   type ThinkingLevel,
 } from "@earendil-works/pi-agent-core";
 import type { Model } from "@earendil-works/pi-ai";
-import { clampThinkingLevel, getSupportedThinkingLevels } from "@earendil-works/pi-ai/models";
 import {
   buildSessionContext,
   convertToLlm,
@@ -15,9 +14,6 @@ import {
   createReadOnlyTools,
   getSelectListTheme,
   type ModelRegistry,
-  type ScopedModel,
-  type KeybindingsManager,
-  type AppKeybinding,
   type SessionEntry,
   type Theme,
   type ThemeColor,
@@ -56,8 +52,7 @@ import {
   type CellPos,
 } from "./side-chat-messages.ts";
 import { SIDE_CHAT_SHORTCUT } from "./shortcuts.ts";
-import { SideChatHelp, actionShortcutLabel, shortcutHint, type ShortcutBindings } from "./side-chat-help.ts";
-import { SideChatDialog } from "./side-chat-dialog.ts";
+import { SideChatHelp, shortcutHint } from "./side-chat-help.ts";
 import { paintPanel, PanelPalette } from "./side-chat-panel.ts";
 import { renderSideChatInput, type SideChatInputFrame } from "./side-chat-input.ts";
 import { sideChatLayoutHeight, type SideChatLayout } from "./side-chat-layout.ts";
@@ -81,8 +76,6 @@ interface SideChatOverlayOptions {
   forkContext: ForkContext;
   tracker: FileActivityTracker;
   modelRegistry: ModelRegistry;
-  getScopedModels?: () => readonly ScopedModel[];
-  keybindings?: Pick<KeybindingsManager, "matches"> & ShortcutBindings;
   sessionManager: SessionView;
   /** Prompt texts resolved from config.json `promptPack` (fresh per fork). */
   promptPack: PromptPack;
@@ -95,7 +88,6 @@ interface SideChatOverlayOptions {
   onLayoutChange?: (layout: SideChatLayout) => void;
   getBounds?: () => OverlayBounds | undefined;
   onBusyChange?: (busy: boolean) => void;
-  onSettingsChange?: (model: Model<any>, thinkingLevel: ThinkingLevel) => void;
   onClose: (action: "close" | "clear") => void;
   /** Alt+E export written to $CWD/.agents/eval/ — called with the written path. */
   onExport: (path: string) => void;
@@ -155,7 +147,7 @@ export class SideChatOverlay implements Component, Focusable {
   private toolMode: "full" | "read-only" = "read-only";
   private _focused = true;
   private disposed = false;
-  private dialog: SideChatDialog | SideChatHelp | null = null;
+  private dialog: SideChatHelp | null = null;
   private forkLeafId: string | null;
   private peekMainTool: AgentTool;
   private spinnerInterval: NodeJS.Timeout | null = null;
@@ -813,7 +805,7 @@ export class SideChatOverlay implements Component, Focusable {
       this.geometry = null;
       this.editorLayout = null;
       this.cancelMouseDrag();
-      const lines = this.dialog.render(width, this.dialog instanceof SideChatHelp ? height : Math.min(height, 18), theme, this.palette);
+      const lines = this.dialog.render(width, height, theme, this.palette);
       this.lastRenderHeight = lines.length;
       return lines;
     }
@@ -840,7 +832,7 @@ export class SideChatOverlay implements Component, Focusable {
     const compact = height < 18;
     const minimal = height < 8;
     this.messageTop = minimal ? 0 : compact ? 2 : SIDE_CHAT_MESSAGE_TOP;
-    const hintLines = minimal ? [] : buildSideChatHintLines(innerWidth, this.options.keybindings, theme);
+    const hintLines = minimal ? [] : buildSideChatHintLines(innerWidth, theme);
     const bottomPadding = compact ? 0 : 1;
     const inputBudget = Math.max(1, Math.min(7, Math.floor(height / 3) + 2,
       height - this.messageTop - hintLines.length - bottomPadding - 1));
@@ -898,7 +890,7 @@ export class SideChatOverlay implements Component, Focusable {
     this.options.tui.requestRender();
   }
 
-  private openDialog(dialog: SideChatDialog | SideChatHelp): void {
+  private openDialog(dialog: SideChatHelp): void {
     this.cancelMouseDrag();
     this.dialog = dialog;
     this.editor.focused = false;
@@ -911,105 +903,17 @@ export class SideChatOverlay implements Component, Focusable {
     this.options.tui.requestRender();
   }
 
-  private chooseModel(): void {
-    if (this.isStreaming) {
-      this.messages.setToolStatus("Stop the current turn with Alt+S before changing models.");
-      this.options.tui.requestRender();
-      return;
-    }
-    const models = this.options.modelRegistry.getAvailable();
-    const current = this.agent.state.model;
-    this.openDialog(new SideChatDialog(
-      this.options.theme, "Side-chat model (main model is unchanged)",
-      models.map((model, i) => ({ value: String(i), label: `${model.provider}/${model.id}`, description: model.name })),
-      true,
-      models.findIndex((model) => model.id === current?.id && model.provider === current?.provider),
-      (value) => {
-        const model = models[Number(value)];
-        if (!model) return;
-        this.agent.state.model = model;
-        this.agent.state.thinkingLevel = clampThinkingLevel(model, this.agent.state.thinkingLevel);
-        this.options.onSettingsChange?.(model, this.agent.state.thinkingLevel);
-        this.dismissDialog();
-      },
-      () => this.dismissDialog(),
-      models.length ? "Type to filter available models." : "No authenticated models available. Configure a provider in Pi first.",
-    ));
-  }
-
-  private chooseThinking(): void {
-    if (this.isStreaming) {
-      this.messages.setToolStatus("Stop the current turn with Alt+S before changing thinking level.");
-      this.options.tui.requestRender();
-      return;
-    }
-    const model = this.agent.state.model;
-    if (!model) return;
-    const levels = getSupportedThinkingLevels(model);
-    this.openDialog(new SideChatDialog(
-      this.options.theme, "Side-chat thinking level (main is unchanged)",
-      levels.map((level) => ({ value: level, label: level })),
-      false, levels.indexOf(this.agent.state.thinkingLevel),
-      (value) => {
-        this.agent.state.thinkingLevel = value as ThinkingLevel;
-        this.options.onSettingsChange?.(model, this.agent.state.thinkingLevel);
-        this.dismissDialog();
-      },
-      () => this.dismissDialog(),
-      model.reasoning ? "Choose a level supported by the side-chat model." : "This model does not support reasoning; only off is available.",
-    ));
-  }
-
-  private matchesAction(data: string, action: AppKeybinding, fallback: Parameters<typeof matchesKey>[1]): boolean {
-    return this.options.keybindings?.matches?.(data, action) ?? matchesKey(data, fallback);
-  }
-
-  private canChangeSettings(): boolean {
-    if (!this.isStreaming) return true;
-    this.messages.setToolStatus("Stop the current turn with Alt+S before changing model/thinking settings.");
-    this.options.tui.requestRender();
-    return false;
-  }
-
-  private cycleModel(direction: 1 | -1): void {
-    if (!this.canChangeSettings()) return;
-    const available = this.options.modelRegistry.getAvailable();
-    const scoped = this.options.getScopedModels?.() ?? [];
-    const candidates = scoped.length
-      ? scoped.filter(({ model }) => available.some((candidate) => candidate.provider === model.provider && candidate.id === model.id))
-      : available.map((model) => ({ model, thinkingLevel: undefined }));
-    if (candidates.length <= 1) return;
-    const current = this.agent.state.model;
-    const index = Math.max(0, candidates.findIndex(({ model }) => model.provider === current?.provider && model.id === current?.id));
-    const next = candidates[(index + direction + candidates.length) % candidates.length]!;
-    this.agent.state.model = next.model;
-    this.agent.state.thinkingLevel = clampThinkingLevel(next.model, next.thinkingLevel ?? this.agent.state.thinkingLevel);
-    this.options.onSettingsChange?.(next.model, this.agent.state.thinkingLevel);
-    this.options.tui.requestRender();
-  }
-
-  private cycleThinking(): void {
-    if (!this.canChangeSettings()) return;
-    const model = this.agent.state.model;
-    if (!model) return;
-    const levels = getSupportedThinkingLevels(model);
-    const index = levels.indexOf(this.agent.state.thinkingLevel);
-    this.agent.state.thinkingLevel = levels[(index + 1) % levels.length]!;
-    this.options.onSettingsChange?.(model, this.agent.state.thinkingLevel);
-    this.options.tui.requestRender();
-  }
-
   handleInput(data: string): void {
     if (matchesKey(data, SIDE_CHAT_SHORTCUT)) {
       this.options.onBackground();
       return;
     }
-    // Layout shortcuts work in pickers/help too, without replacing the agent.
+    // Layout shortcuts work in help too, without replacing the agent.
     if (matchesKey(data, Key.ctrlAlt("left"))) { this.changeLayout("fullscreen"); return; }
     if (matchesKey(data, Key.ctrlAlt("up"))) { this.changeLayout("compact"); return; }
     if (matchesKey(data, Key.ctrlAlt("right"))) { this.changeLayout("right"); return; }
     if (matchesKey(data, Key.ctrlAlt("down"))) { this.changeLayout("floating"); return; }
-    // Stopping a turn must remain available inside help and model pickers too.
+    // Stopping a turn must remain available inside help too.
     if (matchesKey(data, Key.alt("s"))) { this.agent.abort(); return; }
     if (this.dialog) {
       this.dialog.handleInput(data);
@@ -1027,14 +931,9 @@ export class SideChatOverlay implements Component, Focusable {
     }
     // Only an empty draft treats ? as navigation; normal questions and pasted text stay editable.
     if (data === "?" && !this.editor.getText()) {
-      this.openDialog(new SideChatHelp(() => this.dismissDialog(), this.options.keybindings));
+      this.openDialog(new SideChatHelp(() => this.dismissDialog()));
       return;
     }
-    if (this.matchesAction(data, "app.model.cycleForward", Key.ctrl("p"))) { this.cycleModel(1); return; }
-    if (this.matchesAction(data, "app.model.cycleBackward", Key.ctrlShift("p")) || matchesKey(data, Key.alt("p"))) { this.cycleModel(-1); return; }
-    if (this.matchesAction(data, "app.thinking.cycle", Key.shift("tab"))) { this.cycleThinking(); return; }
-    if (matchesKey(data, Key.alt("m"))) { this.chooseModel(); return; }
-    if (matchesKey(data, Key.alt("t"))) { this.chooseThinking(); return; }
     if (matchesKey(data, Key.alt("e"))) {
       this.exportChatHistory();
       return;
@@ -1190,15 +1089,10 @@ export function renderSideChatFrame(opts: SideChatFrameOptions): string[] {
 }
 
 /** One quiet row outside the input card; drop secondary actions before clipping keys. */
-export function buildSideChatHintLines(width: number, bindings?: ShortcutBindings, theme?: Theme): string[] {
-  const modelKey = actionShortcutLabel(bindings, "app.model.cycleForward", "Ctrl+P");
-  const thinkingKey = actionShortcutLabel(bindings, "app.thinking.cycle", "Shift+Tab");
+export function buildSideChatHintLines(width: number, theme?: Theme): string[] {
   const primary = [shortcutHint("Enter", "send", theme), shortcutHint("Esc", "stop/hide", theme), shortcutHint("?", "keys", theme)].join(" · ");
-  const secondary = [shortcutHint("Alt+W", "hide", theme), shortcutHint(modelKey, "model", theme), shortcutHint(thinkingKey, "think", theme)];
   const candidates = [
-    [primary, ...secondary].join(" · "),
-    [primary, ...secondary.slice(0, 2)].join(" · "),
-    [primary, secondary[0]].join(" · "),
+    [primary, shortcutHint("Alt+W", "hide", theme)].join(" · "),
     primary,
     [shortcutHint("Enter", "send", theme), shortcutHint("?", "keys", theme)].join(" · "),
     shortcutHint("?", "keys", theme),

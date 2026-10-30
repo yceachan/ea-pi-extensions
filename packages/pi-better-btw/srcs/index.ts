@@ -54,7 +54,6 @@ export default function sideChatExtension(pi: ExtensionAPI) {
   let lifecycle = 0;
   let quiet = true;
   const indicator = new SideChatStatusIndicator();
-  let sideSettings: Pick<ForkContext, "model" | "thinkingLevel"> | null = null;
   let mouseTerminal: Terminal | null = null;
   let removeMouseListener: (() => void) | null = null;
 
@@ -209,15 +208,12 @@ export default function sideChatExtension(pi: ExtensionAPI) {
     });
     const forkContext: ForkContext = {
       messages: clear ? [] : sessionContext.messages,
-      model: sideSettings?.model ?? ctx.model,
+      model: ctx.model,
       systemPrompt: ctx.getSystemPrompt(),
-      thinkingLevel: sideSettings?.thinkingLevel ?? pi.getThinkingLevel(),
+      thinkingLevel: pi.getThinkingLevel(),
       cwd: ctx.cwd,
       extensionTools: getExtensionAgentTools(),
     };
-    // Copy once: later main-session model/thinking changes never affect the side agent.
-    sideSettings = { model: forkContext.model, thinkingLevel: forkContext.thinkingLevel };
-
     // Pi 1.4 retains this options object by reference and resolves it each
     // frame. Its handle has no update API; mutating this one object lets us
     // reposition the existing component without losing its agent or draft.
@@ -237,7 +233,7 @@ export default function sideChatExtension(pi: ExtensionAPI) {
     const runInteraction = async () => {
       try {
         const action = await ctx.ui.custom<"close" | "clear">(
-          (tui, theme, keybindings, done) => {
+          (tui, theme, _keybindings, done) => {
             if (tui.hasOverlay()) {
               setTimeout(() => {
                 ctx.ui.notify(
@@ -254,8 +250,6 @@ export default function sideChatExtension(pi: ExtensionAPI) {
               forkContext,
               tracker,
               modelRegistry: ctx.modelRegistry,
-              getScopedModels: () => ctx.scopedModels ?? [],
-              keybindings,
               getBounds: () => overlayHandle?.getBounds(),
               onLayoutChange: (layout) => { Object.assign(overlayOptions, sideChatOverlayOptions(layout)); },
               sessionManager: ctx.sessionManager,
@@ -265,7 +259,6 @@ export default function sideChatExtension(pi: ExtensionAPI) {
               quiet,
               onToggleQuiet: () => toggleQuiet(ctx),
               onBusyChange: (busy) => indicator.update(ctx.ui, busy ? "busy" : "idle"),
-              onSettingsChange: (model, thinkingLevel) => { sideSettings = { model, thinkingLevel }; },
               onBackground: () => {
                 overlayHandle?.unfocus();
                 overlayHandle?.setHidden(true);
@@ -324,7 +317,7 @@ export default function sideChatExtension(pi: ExtensionAPI) {
   });
 
   // Session changes destroy the side chat; hidden chats otherwise stay alive.
-  pi.on("session_start", () => { lifecycle++; activeOverlay?.dispose(); sideSettings = null; });
+  pi.on("session_start", () => { lifecycle++; activeOverlay?.dispose(); });
   pi.on("session_shutdown", () => {
     lifecycle++;
     activeOverlay?.dispose();

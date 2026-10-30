@@ -2,20 +2,19 @@
 
 ## feat
 
-- Merge [PR #5](https://github.com/yceachan/ea-pi-extensions/pull/5): independent side-chat model/thinking controls, searchable pickers, live layouts, native message navigation, themed panels, growing input and a busy/idle footer indicator. Thanks to [@De0ta](https://github.com/De0ta) for the contribution.
-- Esc stops a running turn and keeps the chat open; when idle it hides the overlay while retaining the session, history and draft. Esc inside pickers/help returns to the chat. Alt+W continues to hide/restore without stopping generation.
-- Alt+N is the sole user action that discards the side-chat session and starts an empty one, retaining side-chat model/thinking settings. Remove the close-confirmation flow, `/btw-close` and Alt+R.
-
-- Fold side-chat thinking and tool details by default, keeping one useful tool-call line with its file path or first command line and omitting redundant successful-result rows. `/btw-quiet` in either the main or side-chat editor toggles the same display setting, including during generation. Keep this setting across hide/restore and Alt+N; expand full tool arguments/results when quiet is off, while preserving main-session rendering, model context and exported transcripts.
+- 合并 [PR #5](https://github.com/yceachan/ea-pi-extensions/pull/5) 的实时布局、原生消息跳转、主题化面板、自适应输入框及主界面忙碌／空闲指示器。thanks to[@De0ta](https://github.com/De0ta)
+- 旁路会话在创建时继承主会话的模型与思考级别，避免切换设置引起缓存失配。移除PR#5 贡献中，Alt+M／Alt+T 选择器、Ctrl+P／Ctrl+Shift+P／Alt+P 模型循环、Shift+Tab 思考级别循环及独立设置记忆，确保side chat 窗口能与主会话共享前缀缓存。
+- 关于PR#5贡献的ui行为，恢复按 Esc 停止当前轮次；空闲时按 Esc 隐藏浮层的功能，移除alt + s 停止turn的快捷键。
+- Alt+N 统一负责销毁当前旁路会话并开启空白会话，新会话采用主会话当前的模型与思考级别。移除关闭确认流程、`/btw-close` 和 Alt+R。
+- 默认折叠旁路思考内容与工具详情：工具调用保留文件路径或命令首行等有效信息，成功结果省去重复行，失败信息保持可见。主线和旁路编辑器中的 `/btw-quiet` 共用一个显示开关，生成中也可切换，隐藏／恢复及 Alt+N 重建后沿用。关闭 quiet 后展开完整思考、工具参数和结果；主线显示、模型上下文和导出记录保持原样。
 
 ## fix
 
-- Persist one combined side-chat initialization after the main snapshot and before the first real question. Remove per-request user-role reminders and permission notes appended to ordinary tool failures, so successful reads and tool continuations stay focused on the user's task. Preserve actual tool permissions and stop repeated unavailable calls without injecting new user messages.
-
-- Complete `/btw` and `/side` commands when their overlay is mounted rather than when the side-chat session ends. Commands submitted after hiding now dispatch normally, avoiding queued reopenings and repeated close confirmations.
-- Share pending mounts across rapid opens, surface asynchronous UI failures and prevent a pending reset from reopening a chat after host session teardown.
+- 将旁路提示词并为一条固定消息，放在主线快照之后、首个真实问题之前。移除每次请求追加的 user 角色提醒，以及tool result后附加的权限说明的用户身份提示词注入，观测到tool result的提示词注入曾使得旁路agent消极工作，无法对齐旁路用户prompt的交付需求。
+- 适配pi0.7.8 后引入的新slash 命令派发循环机制，`/btw` 和 `/side` 在浮层挂载后即完成命令处理，释放主线输入循环；隐藏浮层后提交的命令可正常执行，避免排队重开和重复关闭确认。此bug层导致/btw 打开窗口并暂时隐藏后后，其他slash命令无法正常派发。
+- 连续打开时复用同一次挂载，异步 UI 失败及时报告；宿主会话结束或切换后，待处理的重建操作随之失效。
 
 ## chore
 
-- Require Pi 1.4+ for the contributed UI/runtime integrations; retain the regular-mode mouse path.
-- Register context-layout, lifecycle and quiet-display regressions using Pi's actual submit, extension-command dispatch and custom UI methods with in-memory fullscreen and regular terminals; cover cached/streaming folds, live command toggles and retained quiet settings, and update both READMEs and shortcut help.
+- UI 与运行时集成要求 Pi 1.4+，保留常规终端模式的鼠标处理路径。
+- 更新双语 README、快捷键帮助及自动化回归覆盖，涵盖全屏／常规模式下的命令生命周期、旁路设置继承、quiet 显示切换与虚拟模型流式调用。

@@ -1,4 +1,4 @@
-import type { AppKeybinding, KeybindingsManager, Theme } from "@earendil-works/pi-coding-agent";
+import type { Theme } from "@earendil-works/pi-coding-agent";
 import { getKeybindings, Key, matchesKey, truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import { paintPanel, type PanelPalette } from "./side-chat-panel.ts";
 
@@ -7,8 +7,6 @@ export const shortcutKey = (text: string, theme?: Theme): string => theme ? them
 export const shortcutDescription = (text: string, theme?: Theme): string => theme ? theme.fg("muted", text) : text;
 export const shortcutHint = (key: string, description: string, theme?: Theme): string =>
   `${shortcutKey(key, theme)} ${shortcutDescription(description, theme)}`;
-
-export type ShortcutBindings = Partial<Pick<KeybindingsManager, "getKeys">>;
 
 export function actionShortcutLabel<Action extends string>(bindings: { getKeys?: (action: Action) => readonly string[] } | undefined, action: Action, fallback: string): string {
   const keys = bindings?.getKeys?.(action);
@@ -22,11 +20,6 @@ export const SIDE_CHAT_SHORTCUT_GROUPS = [
     ["Esc", "Stop response; hide when idle"], ["Alt+W", "Hide / restore (keep running)"],
     ["Alt+S", "Stop response, keep history"], ["?", "Show shortcuts (empty draft)"],
     ["/btw-quiet", "Fold / expand thinking and tools"],
-  ] },
-  { title: "Models & thinking", items: [
-    ["Ctrl+P", "Next model"], ["Ctrl+Shift+P", "Previous model"],
-    ["Alt+P", "Previous model (Windows)"], ["Shift+Tab", "Next thinking level"],
-    ["Alt+M", "Search / select model"], ["Alt+T", "Select thinking level"],
   ] },
   { title: "Tools & context", items: [
     ["Ctrl+T", "Read-only / edit mode"],
@@ -50,7 +43,7 @@ export class SideChatHelp {
   private offset = 0;
   private pageSize = 1;
   private maxOffset = 0;
-  constructor(private onBack: () => void, private bindings?: ShortcutBindings) {}
+  constructor(private onBack: () => void) {}
 
   scrollBy(lines: number): void {
     this.offset = Math.max(0, Math.min(this.maxOffset, this.offset + lines));
@@ -72,16 +65,12 @@ export class SideChatHelp {
     const columns = Math.max(1, Math.min(3, Math.floor((innerWidth + 3) / 34)));
     const columnWidth = Math.max(1, Math.floor((innerWidth - (columns - 1) * 3) / columns));
     const content: string[][] = Array.from({ length: columns }, () => []);
-    const modelActions = new Map<string, AppKeybinding>([
-      ["Ctrl+P", "app.model.cycleForward"], ["Ctrl+Shift+P", "app.model.cycleBackward"], ["Shift+Tab", "app.thinking.cycle"],
-
-    ]);
     const groups = SIDE_CHAT_SHORTCUT_GROUPS.map((group) => ({
       title: group.title,
       items: group.items.map(([key, description]) => [
         key === "Ctrl+↑" ? actionShortcutLabel(getKeybindings(), "tui.altScreen.previousPrompt", key).replace(/Up/g, "↑")
           : key === "Ctrl+↓" ? actionShortcutLabel(getKeybindings(), "tui.altScreen.nextPrompt", key).replace(/Down/g, "↓")
-          : modelActions.has(key) ? actionShortcutLabel(this.bindings, modelActions.get(key)!, key) : key, description,
+          : key, description,
       ] as const),
     }));
     groups.forEach((group, index) => {

@@ -39,11 +39,12 @@ function setup(mode: "fullscreen" | "regular" = "fullscreen") {
   const terminal = new MemoryTerminal();
   const tui = mode === "fullscreen" ? new TuiAltScreen(terminal) : new TuiMainScreen(terminal);
   const commands = new Map<string, any>(), shortcuts = new Map<string, any>(), events = new Map<string, any>();
+  let mainThinking = "off";
   sideChatExtension({
     on: (name: string, handler: any) => events.set(name, handler),
     registerCommand: (name: string, command: any) => commands.set(name, command),
     registerShortcut: (key: string, spec: any) => shortcuts.set(key, spec.handler),
-    getThinkingLevel: () => "off",
+    getThinkingLevel: () => mainThinking,
   } as any);
   const editor = new Editor(tui, getEditorTheme());
   tui.addChild(editor);
@@ -102,6 +103,7 @@ function setup(mode: "fullscreen" | "regular" = "fullscreen") {
   });
   return {
     terminal, tui, ctx, commands, overlays, handles, notices, processed, host,
+    setThinkingLevel: (level: string) => { mainThinking = level; },
     get exits() { return exits; },
     submit: (text: string) => editor.onSubmit!(text),
     background: () => shortcuts.get("alt+w")(ctx),
@@ -260,14 +262,21 @@ for (const mode of ["fullscreen", "regular"] as const) {
   });
 }
 
-test("Alt+N discards history, keeps model settings and returns a usable command loop", async () => {
+test("restoring preserves fork settings; Alt+N discards history and inherits current main settings", async () => {
   const f = setup();
   await f.submit("/btw");
   await tick();
   const old: any = f.overlays[0];
   old.agent.state.messages.push({ role: "user", content: "old side-session question", timestamp: 1 });
-  old.agent.state.thinkingLevel = "low";
-  old.options.onSettingsChange(old.agent.state.model, "low");
+  const originalModel = old.agent.state.model;
+  f.ctx.model = { id: "new-main-model", provider: "test", reasoning: true };
+  f.setThinkingLevel("high");
+  await f.background();
+  await f.submit("/btw");
+  await tick();
+  expect(f.overlays).toHaveLength(1);
+  expect(old.agent.state.model).toBe(originalModel);
+  expect(old.agent.state.thinkingLevel).toBe("off");
   f.terminal.input("\x1bn");
   await tick();
   expect(f.overlays).toHaveLength(2);
@@ -275,7 +284,8 @@ test("Alt+N discards history, keeps model settings and returns a usable command 
   expect(old.disposed).toBe(true);
   expect(fresh.agent).not.toBe(old.agent);
   expect(JSON.stringify(fresh.agent.state.messages)).not.toContain("old side-session question");
-  expect(fresh.agent.state.thinkingLevel).toBe("low");
+  expect(fresh.agent.state.model).toBe(f.ctx.model);
+  expect(fresh.agent.state.thinkingLevel).toBe("high");
   await f.background();
   await f.submit("/exit");
   await tick();

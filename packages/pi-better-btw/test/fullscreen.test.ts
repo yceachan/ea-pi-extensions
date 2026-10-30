@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
-import { getSupportedThinkingLevels } from "@earendil-works/pi-ai/models";
 import { CURSOR_MARKER, getKeybindings, setKeybindings, KeybindingsManager, TUI_KEYBINDINGS, colorToRgb, stripTerminalSequences, visibleWidth, TuiAltScreen, TuiMainScreen, type Terminal, type TerminalColors, type TuiMouseEvent } from "@earendil-works/pi-tui";
 import { initTheme } from "@earendil-works/pi-coding-agent";
 import sideChatExtension from "../srcs/index.ts";
@@ -234,28 +233,26 @@ describe("side-chat lifecycle and settings", () => {
   });
 
   for (const mode of ["fullscreen", "regular"] as const) {
-    test(`${mode}: Alt+S stops a running turn inside help and model pickers`, async () => {
-      for (const modalKey of ["?", "\x1bm"]) {
-        const f = setup(mode);
-        const agent = (f.overlay as any).agent;
-        let finish!: () => void;
-        let aborts = 0;
-        agent.prompt = () => new Promise<void>((resolve) => { finish = resolve; });
-        agent.abort = () => { aborts++; finish(); };
-        f.terminal.input(modalKey);
-        const turn = (f.overlay as any).handleSubmit("question");
-        const dialog = (f.overlay as any).dialog;
-        expect(dialog).not.toBeNull();
-        f.terminal.input("\x1bs");
-        expect(aborts).toBe(1);
-        await turn;
-        expect((f.overlay as any).isStreaming).toBe(false);
-        expect((f.overlay as any).disposed).toBe(false);
-        expect((f.overlay as any).agent).toBe(agent);
-        expect((f.overlay as any).dialog).toBe(dialog);
-        expect(f.statuses.get("pibtw.side-chat")).toContain("\x1b[32m●");
-        expect(f.ctx.model.id).toBe("test-model");
-      }
+    test(`${mode}: Alt+S stops a running turn inside help`, async () => {
+      const f = setup(mode);
+      const agent = (f.overlay as any).agent;
+      let finish!: () => void;
+      let aborts = 0;
+      agent.prompt = () => new Promise<void>((resolve) => { finish = resolve; });
+      agent.abort = () => { aborts++; finish(); };
+      f.terminal.input("?");
+      const turn = (f.overlay as any).handleSubmit("question");
+      const dialog = (f.overlay as any).dialog;
+      expect(dialog).not.toBeNull();
+      f.terminal.input("\x1bs");
+      expect(aborts).toBe(1);
+      await turn;
+      expect((f.overlay as any).isStreaming).toBe(false);
+      expect((f.overlay as any).disposed).toBe(false);
+      expect((f.overlay as any).agent).toBe(agent);
+      expect((f.overlay as any).dialog).toBe(dialog);
+      expect(f.statuses.get("pibtw.side-chat")).toContain("\x1b[32m●");
+      expect(f.ctx.model.id).toBe("test-model");
     });
   }
 
@@ -280,80 +277,42 @@ describe("side-chat lifecycle and settings", () => {
     });
   }
 
-  test("side model/thinking pickers leave main settings untouched and enforce supported levels", () => {
-    const f = setup();
-    const agent = (f.overlay as any).agent;
-    f.terminal.input("\x1bm");
-    f.terminal.input("reasoning");
-    f.terminal.input("\r");
-    expect(agent.state.model.id).toBe("reasoning-model");
-    expect(f.ctx.model.id).toBe("test-model");
-    f.terminal.input("\x1bt");
-    f.terminal.input("\x1b[B");
-    f.terminal.input("\r");
-    expect(agent.state.thinkingLevel).not.toBe("off");
-    f.terminal.input("\x1bm");
-    f.terminal.input("test-model");
-    f.terminal.input("\r");
-    expect(agent.state.model.id).toBe("test-model");
-    expect(agent.state.thinkingLevel).toBe("off");
-    f.terminal.input("\x1bt");
-    const text = f.overlay.render(100).map(stripTerminalSequences).join("\n");
-    expect(text).toContain("does not support reasoning");
-  });
+  for (const mode of ["fullscreen", "regular"] as const) {
+    test(`${mode}: former model/thinking shortcuts keep inherited settings while idle and streaming`, () => {
+      const f = setup(mode);
+      const overlay: any = f.overlay;
+      const model = overlay.agent.state.model;
+      const thinking = overlay.agent.state.thinkingLevel;
+      for (const streaming of [false, true]) {
+        overlay.isStreaming = streaming;
+        for (const key of ["\x1bm", "\x1bt", "\x10", "\x1b[112;6u", "\x1bp", "\x1b[Z"]) {
+          f.terminal.input(key);
+          expect(overlay.agent.state.model).toBe(model);
+          expect(overlay.agent.state.thinkingLevel).toBe(thinking);
+          expect(overlay.dialog).toBeNull();
+        }
+      }
+      overlay.isStreaming = false;
+      expect(f.ctx.model).toBe(model);
+      expect(f.mainInputs).toBe("");
+    });
+  }
 
-  test("Esc returns from pickers; Alt+W still backgrounds an open picker", async () => {
+  test("Esc returns from help; Alt+W backgrounds and restores the open help page", async () => {
     const f = setup();
-    f.terminal.input("\x1bm");
+    f.terminal.input("?");
     f.terminal.input("\x1b");
     expect(f.handle.isHidden()).toBe(false);
     expect((f.overlay as any).dialog).toBeNull();
-    f.terminal.input("\x1bt");
+    f.terminal.input("?");
+    const help = (f.overlay as any).dialog;
     f.terminal.input("\x1bw");
     expect(f.handle.isHidden()).toBe(true);
     await f.background();
+    expect((f.overlay as any).dialog).toBe(help);
     f.terminal.input("\x1b");
     expect((f.overlay as any).dialog).toBeNull();
     expect((f.overlay as any).disposed).toBe(false);
-  });
-
-  test("Pi-style cycling wraps models and supported thinking without changing main settings", () => {
-    const f = setup();
-    const agent = (f.overlay as any).agent;
-    f.terminal.input("\x10"); // Ctrl+P
-    expect(agent.state.model.id).toBe("reasoning-model");
-    f.terminal.input("\x1b[Z"); // Shift+Tab
-    const firstThinking = agent.state.thinkingLevel;
-    expect(firstThinking).not.toBe("off");
-    for (let i = 1; i < getSupportedThinkingLevels(agent.state.model).length; i++) f.terminal.input("\x1b[Z");
-    expect(agent.state.thinkingLevel).toBe("off");
-    f.terminal.input("\x10");
-    expect(agent.state.model.id).toBe("test-model");
-    f.terminal.input("\x1b[Z");
-    expect(agent.state.thinkingLevel).toBe("off");
-    f.terminal.input("\x1bp"); // Windows backward alias
-    expect(agent.state.model.id).toBe("reasoning-model");
-    f.terminal.input("\x1b[112;6u"); // Ctrl+Shift+P
-    expect(agent.state.model.id).toBe("test-model");
-    expect(f.ctx.model.id).toBe("test-model");
-    expect(f.mainInputs).toBe("");
-  });
-
-  test("model cycle follows Pi scoped order and per-model thinking, filtering unavailable models", () => {
-    const f = setup();
-    f.models.push({ id: "third", provider: "test", name: "Third", reasoning: false });
-    f.ctx.scopedModels = [
-      { model: f.models[0] },
-      { model: { id: "unavailable", provider: "test" } },
-      { model: f.models[1], thinkingLevel: "high" },
-    ];
-    f.terminal.input("\x10");
-    expect((f.overlay as any).agent.state.model.id).toBe("reasoning-model");
-    expect((f.overlay as any).agent.state.thinkingLevel).toBe("high");
-    f.terminal.input("\x10");
-    expect((f.overlay as any).agent.state.model.id).toBe("test-model");
-    expect((f.overlay as any).agent.state.thinkingLevel).toBe("off");
-    expect(f.ctx.model.id).toBe("test-model");
   });
 
   test("? opens help only on an empty draft; Esc returns and keeps the agent alive", () => {
@@ -362,10 +321,10 @@ describe("side-chat lifecycle and settings", () => {
     const lines = f.overlay.render(110);
     const text = lines.map(stripTerminalSequences).join("\n");
     expect(text).toContain("Side chat shortcuts");
-    expect(text).toContain("Ctrl+P");
+    expect(text).not.toContain("Ctrl+P");
     expect(text).not.toContain("Ctrl+Alt+W");
     expect(lines.join("\n")).not.toContain("\x1b[97m");
-    expect(text).toContain("Next model");
+    expect(text).toContain("Read-only");
     f.terminal.input("\x1b");
     expect((f.overlay as any).dialog).toBeNull();
     expect((f.overlay as any).disposed).toBe(false);
@@ -376,24 +335,7 @@ describe("side-chat lifecycle and settings", () => {
     expect((f.overlay as any).dialog).toBeNull();
   });
 
-  test("short-terminal model picker keeps selected entries visible", () => {
-    const f = setup();
-    f.models.splice(0, f.models.length, ...Array.from({ length: 10 }, (_, i) => ({
-      id: `model-${i}`, provider: "test", name: `Model ${i}`, reasoning: false,
-    })));
-    f.terminal.rows = 10;
-    f.terminal.resize();
-    f.terminal.input("\x1bm");
-    for (let i = 0; i < 10; i++) {
-      const lines = f.overlay.render(80);
-      const selected = (f.overlay as any).dialog.list.getSelectedItem().label;
-      expect(lines.length).toBeLessThanOrEqual(8);
-      expect(lines.map(stripTerminalSequences).join("\n")).toContain(selected);
-      f.terminal.input("\x1b[B");
-    }
-  });
-
-  test("selected virtual models stream through registry runtime, not compatibility/global auth", async () => {
+  test("inherited virtual models stream through registry runtime, not compatibility/global auth", async () => {
     const f = setup();
     f.models.push({ id: "router", provider: "virtual", name: "Router", reasoning: true, api: "pi-virtual" } as any);
     const calls: string[] = [];
@@ -409,29 +351,14 @@ describe("side-chat lifecycle and settings", () => {
       stream.end();
       return stream;
     };
-    f.terminal.input("\x1bm");
-    f.terminal.input("router");
-    f.terminal.input("\r");
+    f.ctx.model = f.models.at(-1);
+    f.terminal.input("\x1bn");
+    await Bun.sleep(0);
     await (f.overlay as any).handleSubmit("hello");
     expect(calls).toEqual(["pi-virtual"]);
     expect((f.overlay as any).agent.state.errorMessage).toBeUndefined();
     expect(f.overlay.render(100).map(stripTerminalSequences).join("\n")).toContain("routed answer");
-    expect(f.ctx.model.id).toBe("test-model");
-  });
-
-  test("model/thinking changes are blocked during a running turn", () => {
-    const f = setup();
-    (f.overlay as any).isStreaming = true;
-    f.terminal.input("\x1bm");
-    expect((f.overlay as any).dialog).toBeNull();
-    f.terminal.input("\x1bt");
-    f.terminal.input("\x10");
-    f.terminal.input("\x1b[Z");
-    expect((f.overlay as any).agent.state.model.id).toBe("test-model");
-    expect((f.overlay as any).agent.state.thinkingLevel).toBe("off");
-    expect((f.overlay as any).dialog).toBeNull();
-    expect(f.overlay.render(100).map(stripTerminalSequences).join("\n")).toContain("Alt+S");
-    (f.overlay as any).isStreaming = false;
+    expect(f.ctx.model.id).toBe("router");
   });
 
   test("busy status survives hiding and returns green on completion", async () => {
